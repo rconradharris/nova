@@ -36,9 +36,9 @@ class DiskConfigController(object):
     def __init__(self):
         self.compute_api = compute.API()
 
-    def _return_dict(self, server_id, managed_disk):
+    def _return_dict(self, server_id, auto_disk_config):
         return {'server': {'id': server_id,
-                           'managed_disk': managed_disk}}
+                           'auto_disk_config': auto_disk_config}}
 
     def index(self, req, server_id):
         context = req.environ['nova.context']
@@ -47,8 +47,8 @@ class DiskConfigController(object):
         except exception.NotFound:
             explanation = _("Server not found.")
             return faults.Fault(exc.HTTPNotFound(explanation=explanation))
-        managed_disk = server['managed_disk'] or False
-        return self._return_dict(server_id, managed_disk)
+        auto_disk_config = server['auto_disk_config'] or False
+        return self._return_dict(server_id, auto_disk_config)
 
     def update(self, req, server_id, body=None):
         if not body:
@@ -60,11 +60,13 @@ class DiskConfigController(object):
             explanation = _("Server not found.")
             return faults.Fault(exc.HTTPNotFound(explanation=explanation))
 
-        managed_disk = str(body['server'].get('managed_disk', False)).lower()
-        managed_disk = managed_disk == 'true' or False
-        self.compute_api.update(context, server_id, managed_disk=managed_disk)
+        auto_disk_config = str(body['server'].get(
+            'auto_disk_config', False)).lower()
+        auto_disk_config = auto_disk_config == 'true' or False
+        self.compute_api.update(context, server_id,
+                auto_disk_config=auto_disk_config)
 
-        return self._return_dict(server_id, managed_disk)
+        return self._return_dict(server_id, auto_disk_config)
 
 
 class ImageDiskConfigController(object):
@@ -73,9 +75,9 @@ class ImageDiskConfigController(object):
         self._image_service = image_service or \
                 nova.image.get_default_image_service()
 
-    def _return_dict(self, image_id, managed_disk):
+    def _return_dict(self, image_id, auto_disk_config):
         return {'image': {'id': image_id,
-                'managed_disk': managed_disk}}
+                'auto_disk_config': auto_disk_config}}
 
     def index(self, req, image_id):
         context = req.environ['nova.context']
@@ -86,9 +88,9 @@ class ImageDiskConfigController(object):
             raise webob.exc.HTTPNotFound(explanation=explanation)
         image_properties = image.get('properties', None)
         if image_properties:
-            managed_disk = image_properties.get('managed_disk', False)
+            auto_disk_config = image_properties.get('auto_disk_config', False)
 
-        return self._return_dict(image_id, managed_disk)
+        return self._return_dict(image_id, auto_disk_config)
 
 
 class Diskconfig(extensions.ExtensionDescriptor):
@@ -102,7 +104,7 @@ class Diskconfig(extensions.ExtensionDescriptor):
     def _server_extension_controller(self):
         metadata = {
             "attributes": {
-                'managed_disk': ["server_id", "enabled"]}}
+                'auto_disk_config': ["server_id", "enabled"]}}
 
         body_serializers = {
             'application/xml': wsgi.XMLDictSerializer(metadata=metadata,
@@ -120,7 +122,7 @@ class Diskconfig(extensions.ExtensionDescriptor):
         resources = []
         metadata = {
             "attributes": {
-                'managed_disk': ["image_id", "enabled"]}}
+                'auto_disk_config': ["image_id", "enabled"]}}
 
         body_serializers = {
             'application/xml': wsgi.XMLDictSerializer(metadata=metadata,

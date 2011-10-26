@@ -34,7 +34,7 @@ class DiskConfigTest(test.TestCase):
 
     def test_retrieve_disk_config(self):
         def fake_compute_get(*args, **kwargs):
-            return {'managed_disk': True}
+            return {'auto_disk_config': True}
 
         self.stubs.Set(compute.api.API, 'routing_get', fake_compute_get)
         req = webob.Request.blank(self.url)
@@ -42,15 +42,15 @@ class DiskConfigTest(test.TestCase):
         res = req.get_response(fakes.wsgi_app())
         self.assertEqual(res.status_int, 200)
         body = json.loads(res.body)
-        self.assertEqual(body['server']['managed_disk'], True)
+        self.assertEqual(body['server']['auto_disk_config'], True)
         self.assertEqual(body['server']['id'], self.uuid)
 
     def test_set_disk_config(self):
         def fake_compute_get(*args, **kwargs):
-            return {'managed_disk': 'True'}
+            return {'auto_disk_config': 'True'}
 
         def fake_compute_update(*args, **kwargs):
-            return {'managed_disk': 'False'}
+            return {'auto_disk_config': 'False'}
 
         self.stubs.Set(compute.api.API, 'update', fake_compute_update)
         self.stubs.Set(compute.api.API, 'routing_get', fake_compute_get)
@@ -59,12 +59,12 @@ class DiskConfigTest(test.TestCase):
         req.method = 'PUT'
         req.headers['Accept'] = 'application/json'
         req.headers['Content-Type'] = 'application/json'
-        req.body = json.dumps({'server': {'managed_disk': False}})
+        req.body = json.dumps({'server': {'auto_disk_config': False}})
 
         res = req.get_response(fakes.wsgi_app())
         self.assertEqual(res.status_int, 200)
         body = json.loads(res.body)
-        self.assertEqual(body['server']['managed_disk'], False)
+        self.assertEqual(body['server']['auto_disk_config'], False)
         self.assertEqual(body['server']['id'], self.uuid)
 
     def test_retrieve_disk_config_bad_server_fails(self):
@@ -93,7 +93,7 @@ class DiskConfigTest(test.TestCase):
         req.method = 'PUT'
         req.headers['Accept'] = 'application/json'
         req.headers['Content-Type'] = 'application/json'
-        req.body = json.dumps({'server': {'managed_disk': False}})
+        req.body = json.dumps({'server': {'auto_disk_config': False}})
 
         res = req.get_response(fakes.wsgi_app())
         self.assertEqual(res.status_int, 404)
@@ -110,7 +110,7 @@ class ImageDiskConfigTest(test.TestCase):
         fakes.stub_out_glance(self.stubs)
 
         def fake_image_service_show(*args, **kwargs):
-            return {'properties': {'managed_disk': True}}
+            return {'properties': {'auto_disk_config': True}}
 
         self.stubs.Set(image.glance.GlanceImageService, 'show',
                        fake_image_service_show)
@@ -122,7 +122,7 @@ class ImageDiskConfigTest(test.TestCase):
 
         body = json.loads(res.body)
 
-        self.assertEqual(body['image']['managed_disk'], True)
+        self.assertEqual(body['image']['auto_disk_config'], True)
         self.assertEqual(int(body['image']['id']), 10)
 
     def test_image_get_disk_config_no_image_fails(self):

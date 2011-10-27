@@ -141,6 +141,12 @@ class RequestExtensionController(object):
     def process(self, req, *args, **kwargs):
         res = req.get_response(self.application)
 
+        # Don't call extensions if the main application returned an
+        # unsuccessful status
+        successful = 200 <= res.status < 400
+        if not successful:
+            return res
+
         # Deserialize the response body, if any
         body = None
         if res.body:

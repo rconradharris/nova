@@ -457,8 +457,7 @@ def stub_instance(id, user_id='fake', project_id='fake', host=None,
                   flavor_id="1", name=None, key_name='',
                   access_ipv4=None, access_ipv6=None, progress=0,
                   auto_disk_config=False):
-    metadata = []
-    metadata.append(models.InstanceMetadata(key='seq', value=id))
+    metadata = [models.InstanceMetadata(key='seq', value=id)]
 
     inst_type = instance_types.get_instance_type_by_flavor_id(int(flavor_id))
 

@@ -50,8 +50,8 @@ from nova import utils
 
 
 FLAGS = flags.FLAGS
-FAKE_UUIDS = {0: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'}
-FAKE_UUID = FAKE_UUIDS[0]
+FAKE_UUID = fakes.FAKE_UUID
+FAKE_UUIDS = {0: FAKE_UUIDS}
 NS = "{http://docs.openstack.org/compute/api/v1.1}"
 ATOMNS = "{http://www.w3.org/2005/Atom}"
 XPATH_NS = {
@@ -59,6 +59,8 @@ XPATH_NS = {
     'ns': 'http://docs.openstack.org/compute/api/v1.1'
 }
 
+
+stub_instance = fakes.stub_instance
 
 def get_fake_uuid(token=0):
     if not token in FAKE_UUIDS:
@@ -147,69 +149,6 @@ def instance_update(context, instance_id, values):
 
 def instance_addresses(context, instance_id):
     return None
-
-
-def stub_instance(id, user_id='fake', project_id='fake', host=None,
-                  vm_state=None, task_state=None,
-                  reservation_id="", uuid=FAKE_UUID, image_ref="10",
-                  flavor_id="1", name=None, key_name='',
-                  access_ipv4=None, access_ipv6=None, progress=0):
-    metadata = []
-    metadata.append(InstanceMetadata(key='seq', value=id))
-
-    inst_type = instance_types.get_instance_type_by_flavor_id(int(flavor_id))
-
-    if host is not None:
-        host = str(host)
-
-    if key_name:
-        key_data = 'FAKE'
-    else:
-        key_data = ''
-
-    # ReservationID isn't sent back, hack it in there.
-    server_name = name or "server%s" % id
-    if reservation_id != "":
-        server_name = "reservation_%s" % (reservation_id, )
-
-    instance = {
-        "id": int(id),
-        "created_at": datetime.datetime(2010, 10, 10, 12, 0, 0),
-        "updated_at": datetime.datetime(2010, 11, 11, 11, 0, 0),
-        "admin_pass": "",
-        "user_id": user_id,
-        "project_id": project_id,
-        "image_ref": image_ref,
-        "kernel_id": "",
-        "ramdisk_id": "",
-        "launch_index": 0,
-        "key_name": key_name,
-        "key_data": key_data,
-        "vm_state": vm_state or vm_states.BUILDING,
-        "task_state": task_state,
-        "memory_mb": 0,
-        "vcpus": 0,
-        "local_gb": 0,
-        "hostname": "",
-        "host": host,
-        "instance_type": dict(inst_type),
-        "user_data": "",
-        "reservation_id": reservation_id,
-        "mac_address": "",
-        "scheduled_at": utils.utcnow(),
-        "launched_at": utils.utcnow(),
-        "terminated_at": utils.utcnow(),
-        "availability_zone": "",
-        "display_name": server_name,
-        "display_description": "",
-        "locked": False,
-        "metadata": metadata,
-        "access_ip_v4": access_ipv4,
-        "access_ip_v6": access_ipv6,
-        "uuid": uuid,
-        "progress": progress}
-
-    return instance
 
 
 def fake_compute_api(cls, req, id):

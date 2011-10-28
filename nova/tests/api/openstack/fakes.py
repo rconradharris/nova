@@ -15,6 +15,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import datetime
+
 import webob
 import webob.dec
 import webob.request
@@ -35,6 +37,9 @@ from nova.api.openstack import urlmap
 from nova.api.openstack import versions
 from nova.api.openstack import wsgi as os_wsgi
 from nova.auth.manager import User, Project
+from nova.compute import instance_types
+from nova.compute import vm_states
+from nova.db.sqlalchemy import models
 import nova.image.fake
 from nova.tests.glance import stubs as glance_stubs
 
@@ -441,3 +446,71 @@ class FakeRateLimiter(object):
     @webob.dec.wsgify
     def __call__(self, req):
         return self.application
+
+
+FAKE_UUID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+
+
+def stub_instance(id, user_id='fake', project_id='fake', host=None,
+                  vm_state=None, task_state=None,
+                  reservation_id="", uuid=FAKE_UUID, image_ref="10",
+                  flavor_id="1", name=None, key_name='',
+                  access_ipv4=None, access_ipv6=None, progress=0,
+                  auto_disk_config=False):
+    metadata = []
+    metadata.append(models.InstanceMetadata(key='seq', value=id))
+
+    inst_type = instance_types.get_instance_type_by_flavor_id(int(flavor_id))
+
+    if host is not None:
+        host = str(host)
+
+    if key_name:
+        key_data = 'FAKE'
+    else:
+        key_data = ''
+
+    # ReservationID isn't sent back, hack it in there.
+    server_name = name or "server%s" % id
+    if reservation_id != "":
+        server_name = "reservation_%s" % (reservation_id, )
+
+    instance = {
+        "id": int(id),
+        "created_at": datetime.datetime(2010, 10, 10, 12, 0, 0),
+        "updated_at": datetime.datetime(2010, 11, 11, 11, 0, 0),
+        "admin_pass": "",
+        "user_id": user_id,
+        "project_id": project_id,
+        "image_ref": image_ref,
+        "kernel_id": "",
+        "ramdisk_id": "",
+        "launch_index": 0,
+        "key_name": key_name,
+        "key_data": key_data,
+        "vm_state": vm_state or vm_states.BUILDING,
+        "task_state": task_state,
+        "memory_mb": 0,
+        "vcpus": 0,
+        "local_gb": 0,
+        "hostname": "",
+        "host": host,
+        "instance_type": dict(inst_type),
+        "user_data": "",
+        "reservation_id": reservation_id,
+        "mac_address": "",
+        "scheduled_at": utils.utcnow(),
+        "launched_at": utils.utcnow(),
+        "terminated_at": utils.utcnow(),
+        "availability_zone": "",
+        "display_name": server_name,
+        "display_description": "",
+        "locked": False,
+        "metadata": metadata,
+        "access_ip_v4": access_ipv4,
+        "access_ip_v6": access_ipv6,
+        "uuid": uuid,
+        "progress": progress,
+        "auto_disk_config": auto_disk_config}
+
+    return instance

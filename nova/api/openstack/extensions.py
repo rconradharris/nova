@@ -143,7 +143,7 @@ class RequestExtensionController(object):
 
         # Don't call extensions if the main application returned an
         # unsuccessful status
-        successful = 200 <= res.status < 400
+        successful = 200 <= res.status_int < 400
         if not successful:
             return res
 

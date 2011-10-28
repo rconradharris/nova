@@ -106,11 +106,43 @@ class _FakeImageService(object):
                  'properties': {'kernel_id': FLAGS.null_kernel,
                                 'ramdisk_id': FLAGS.null_kernel}}
 
+        image6 = {'id': '6',
+                 'name': 'fakeimage6',
+                 'created_at': timestamp,
+                 'updated_at': timestamp,
+                 'deleted_at': None,
+                 'deleted': False,
+                 'status': 'active',
+                 'is_public': False,
+                 'container_format': 'ova',
+                 'disk_format': 'vhd',
+                 'properties': {'kernel_id': FLAGS.null_kernel,
+                                'ramdisk_id': FLAGS.null_kernel,
+                                'architecture': 'x86_64',
+                                'auto_disk_config': 'False'}}
+
+        image7 = {'id': '7',
+                 'name': 'fakeimage7',
+                 'created_at': timestamp,
+                 'updated_at': timestamp,
+                 'deleted_at': None,
+                 'deleted': False,
+                 'status': 'active',
+                 'is_public': False,
+                 'container_format': 'ova',
+                 'disk_format': 'vhd',
+                 'properties': {'kernel_id': FLAGS.null_kernel,
+                                'ramdisk_id': FLAGS.null_kernel,
+                                'architecture': 'x86_64',
+                                'auto_disk_config': 'True'}}
+
         self.create(None, image1)
         self.create(None, image2)
         self.create(None, image3)
         self.create(None, image4)
         self.create(None, image5)
+        self.create(None, image6)
+        self.create(None, image7)
         super(_FakeImageService, self).__init__()
 
     def index(self, context, filters=None, marker=None, limit=None):

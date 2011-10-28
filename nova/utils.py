@@ -1012,5 +1012,5 @@ def make_dev_path(dev, partition=None, base='/dev'):
     return path
 
 
-def raise_this(this):
+def RAISE_THIS(this):
     raise Exception(pprint.pformat(this))

@@ -19,6 +19,7 @@ from nova.api.openstack import servers
 from nova.api.openstack import xmlutil
 from nova import compute
 from nova import log as logging
+from nova import utils
 
 LOG = logging.getLogger('nova.api.openstack.contrib.disk_config')
 
@@ -37,6 +38,21 @@ class ServersDiskConfigTemplate(xmlutil.TemplateBuilder):
     def construct(self):
         root = xmlutil.TemplateElement('servers')
         elem = xmlutil.SubTemplateElement(root, 'server', selector='servers')
+        elem.set('{%s}diskConfig' % XMLNS_DCF, '%s:diskConfig' % ALIAS)
+        return xmlutil.SlaveTemplate(root, 1, nsmap={ALIAS: XMLNS_DCF})
+
+
+class ImageDiskConfigTemplate(xmlutil.TemplateBuilder):
+    def construct(self):
+        root = xmlutil.TemplateElement('image')
+        root.set('{%s}diskConfig' % XMLNS_DCF, '%s:diskConfig' % ALIAS)
+        return xmlutil.SlaveTemplate(root, 1, nsmap={ALIAS: XMLNS_DCF})
+
+
+class ImagesDiskConfigTemplate(xmlutil.TemplateBuilder):
+    def construct(self):
+        root = xmlutil.TemplateElement('images')
+        elem = xmlutil.SubTemplateElement(root, 'image', selector='images')
         elem.set('{%s}diskConfig' % XMLNS_DCF, '%s:diskConfig' % ALIAS)
         return xmlutil.SlaveTemplate(root, 1, nsmap={ALIAS: XMLNS_DCF})
 
@@ -81,10 +97,44 @@ class Disk_config(extensions.ExtensionDescriptor):
 
         return res
 
+    def _attach_image_slave_template(self, res, body):
+        template = res.environ.get('nova.template')
+        # NOTE(sirp): template is only used for XML serialization
+        if template:
+            if 'images' in body:
+                template.attach(ImagesDiskConfigTemplate())
+            else:
+                template.attach(ImageDiskConfigTemplate())
+
+    def _GET_images(self, req, res, body):
+        context = req.environ['nova.context']
+        self._attach_image_slave_template(res, body)
+
+        if 'images' in body:
+            images = body['images']
+        else:
+            images = [body['image']]
+
+        for image_dict in images:
+            # TODO(sirp): it would be nice to eliminate this extra lookup
+            # FIXME(sirp): think johannes is fixing this fault stuff
+            str_value = image_dict['metadata'].get(
+                'auto_disk_config', 'False')
+            auto_disk_config = utils.bool_from_str(str_value)
+
+            key = "%s:diskConfig" % ALIAS
+            value = 'AUTO' if auto_disk_config else 'MANUAL'
+            image_dict[key] = value
+
+        return res
+
     def get_request_extensions(self):
         ReqExt = extensions.RequestExtension 
         return [
             ReqExt(method='GET',
                    url_route='/:(project_id)/servers/:(id)',
-                   handler=self._GET_servers)
+                   handler=self._GET_servers),
+            ReqExt(method='GET',
+                   url_route='/:(project_id)/images/:(id)',
+                   handler=self._GET_images)
         ]

@@ -13,6 +13,7 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License
+from xml.dom import minidom
 
 from nova.api.openstack import extensions
 from nova.api.openstack import servers
@@ -65,68 +66,85 @@ class Disk_config(extensions.ExtensionDescriptor):
     namespace = XMLNS_DCF
     updated = "2011-09-27:00:00+00:00"
 
+    API_DISK_CONFIG = "%s:diskConfig" % ALIAS
+    INTERNAL_DISK_CONFIG = "auto_disk_config"
+
     def __init__(self, ext_mgr):
         super(Disk_config, self).__init__(ext_mgr)
         self.compute_api = compute.API()
 
-    def _attach_server_slave_template(self, res, body):
+    def _GET_servers(self, req, res, body):
+        # If using XML, use serialization template
         template = res.environ.get('nova.template')
-        # NOTE(sirp): template is only used for XML serialization
         if template:
             if 'servers' in body:
                 template.attach(ServersDiskConfigTemplate())
             else:
                 template.attach(ServerDiskConfigTemplate())
 
-    def _GET_servers(self, req, res, body):
         context = req.environ['nova.context']
-        self._attach_server_slave_template(res, body)
+        servers = body['servers'] if 'servers' in body else [body['server']]
+        for server in servers:
+            if self.INTERNAL_DISK_CONFIG in server:
+                # TODO(sirp): it would be nice to eliminate this extra lookup
+                db_server = self.compute_api.routing_get(context, server['id'])
 
-        if 'servers' in body:
-            servers = body['servers']
-        else:
-            servers = [body['server']]
+                value = db_server[self.INTERNAL_DISK_CONFIG]
+                api_value = 'AUTO' if value else 'MANUAL'
 
-        for server_dict in servers:
-            # TODO(sirp): it would be nice to eliminate this extra lookup
-            # FIXME(sirp): think johannes is fixing this fault stuff
-            server = self.compute_api.routing_get(context, server_dict['id'])
-            key = "%s:diskConfig" % ALIAS
-            value = 'AUTO' if server['auto_disk_config'] else 'MANUAL'
-            server_dict[key] = value
+                server[self.API_DISK_CONFIG] = api_value
 
         return res
 
-    def _attach_image_slave_template(self, res, body):
+    def _GET_images(self, req, res, body):
         template = res.environ.get('nova.template')
-        # NOTE(sirp): template is only used for XML serialization
         if template:
             if 'images' in body:
                 template.attach(ImagesDiskConfigTemplate())
             else:
                 template.attach(ImageDiskConfigTemplate())
 
-    def _GET_images(self, req, res, body):
-        context = req.environ['nova.context']
-        self._attach_image_slave_template(res, body)
+        images = body['images'] if 'images' in body else [body['image']]
+        for image in images:
+            metadata = image['metadata']
+            if self.INTERNAL_DISK_CONFIG in metadata:
 
-        if 'images' in body:
-            images = body['images']
-        else:
-            images = [body['image']]
+                raw_value = metadata[self.INTERNAL_DISK_CONFIG]
+                value = utils.bool_from_str(raw_value)
+                api_value = 'AUTO' if value else 'MANUAL'
 
-        for image_dict in images:
-            # TODO(sirp): it would be nice to eliminate this extra lookup
-            # FIXME(sirp): think johannes is fixing this fault stuff
-            str_value = image_dict['metadata'].get(
-                'auto_disk_config', 'False')
-            auto_disk_config = utils.bool_from_str(str_value)
-
-            key = "%s:diskConfig" % ALIAS
-            value = 'AUTO' if auto_disk_config else 'MANUAL'
-            image_dict[key] = value
+                image[self.API_DISK_CONFIG] = api_value
 
         return res
+
+    def _POST_servers(self, req, res, body):
+        return self._GET_servers(req, res, body)
+
+    def _pre_POST_servers(self, req):
+        # NOTE(sirp): in an ideal world, extensions shouldn't have to worry
+        # about serialization--that would be handled exclusively by
+        # middleware. Unfortunately, until we refactor extensions to better
+        # support pre-processing extensions (puttinng in place an
+        # EagerDeserialization middleware similar to our LazySerialization), we'll
+        # need to keep this hack in place.
+
+        content_type = req.content_type
+        if content_type == 'applicaton/json':
+            body = utils.loads(req.body)
+            server = body['server']
+            api_value = server.get(self.API_DISK_CONFIG)
+            if api_value:
+                value = api_value == 'AUTO'
+                server[self.INTERNAL_DISK_CONFIG] = value
+                req.body = utils.dumps(body)
+        else:
+            node = minidom.parseString(req.body)
+            server = node.getElementsByTagName('server')[0]
+            api_value = server.getAttribute(self.API_DISK_CONFIG)
+            if api_value:
+                value = api_value == 'AUTO'
+                server.setAttribute(self.INTERNAL_DISK_CONFIG, str(value)) 
+                req.body = str(node.toxml())
 
     def get_request_extensions(self):
         ReqExt = extensions.RequestExtension 
@@ -134,6 +152,10 @@ class Disk_config(extensions.ExtensionDescriptor):
             ReqExt(method='GET',
                    url_route='/:(project_id)/servers/:(id)',
                    handler=self._GET_servers),
+            ReqExt(method='POST',
+                   url_route='/:(project_id)/servers',
+                   handler=self._POST_servers,
+                   pre_handler=self._pre_POST_servers),
             ReqExt(method='GET',
                    url_route='/:(project_id)/images/:(id)',
                    handler=self._GET_images)

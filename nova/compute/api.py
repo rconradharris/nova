@@ -190,7 +190,8 @@ class API(base.Base):
                reservation_id, access_ip_v4, access_ip_v6,
                requested_networks, config_drive,
                block_device_mapping,
-               wait_for_instances):
+               wait_for_instances,
+               auto_disk_config):
         """Verify all the input parameters regardless of the provisioning
         strategy being performed and schedule the instance(s) for
         creation."""
@@ -254,11 +255,14 @@ class API(base.Base):
         vm_mode = None
         if 'properties' in image and 'vm_mode' in image['properties']:
             vm_mode = image['properties']['vm_mode']
-        auto_disk_config = False
-        if ('properties' in image and
-            'auto_disk_config' in image['properties']):
-            auto_disk_config = utils.bool_from_str(
-                image['properties']['auto_disk_config'])
+
+        # If instance doesn't have auto_disk_config overriden by request, use
+        # whatever the image indicates
+        if auto_disk_config is None:
+            if ('properties' in image and
+                'auto_disk_config' in image['properties']):
+                auto_disk_config = utils.bool_from_str(
+                    image['properties']['auto_disk_config'])
 
         if kernel_id is None:
             kernel_id = image['properties'].get('kernel_id', None)
@@ -536,7 +540,7 @@ class API(base.Base):
                reservation_id=None, block_device_mapping=None,
                access_ip_v4=None, access_ip_v6=None,
                requested_networks=None, config_drive=None,
-               wait_for_instances=True):
+               wait_for_instances=True, auto_disk_config=None):
         """
         Provision instances, sending instance information to the
         scheduler.  The scheduler will determine where the instance(s)
@@ -558,7 +562,8 @@ class API(base.Base):
                                reservation_id, access_ip_v4, access_ip_v6,
                                requested_networks, config_drive,
                                block_device_mapping,
-                               wait_for_instances)
+                               wait_for_instances,
+                               auto_disk_config)
 
         if instances is None:
             # wait_for_instances must have been False

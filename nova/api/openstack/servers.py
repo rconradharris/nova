@@ -436,6 +436,8 @@ class Controller(object):
         if min_count > max_count:
             min_count = max_count
 
+        auto_disk_config = server_dict.get('auto_disk_config')
+
         try:
             inst_type = \
                     instance_types.get_instance_type_by_flavor_id(flavor_id)
@@ -463,7 +465,8 @@ class Controller(object):
                             availability_zone=availability_zone,
                             config_drive=config_drive,
                             block_device_mapping=block_device_mapping,
-                            wait_for_instances=not ret_resv_id)
+                            wait_for_instances=not ret_resv_id,
+                            auto_disk_config=auto_disk_config)
         except quota.QuotaError as error:
             self._handle_quota_error(error)
         except exception.InstanceTypeMemoryTooSmall as error:
@@ -1170,6 +1173,10 @@ class ServerXMLDeserializer(wsgi.MetadataXMLDeserializer):
         security_groups = self._extract_security_groups(server_node)
         if security_groups is not None:
             server["security_groups"] = security_groups
+
+        auto_disk_config = server_node.getAttribute('auto_disk_config')
+        if auto_disk_config:
+            server['auto_disk_config'] = utils.bool_from_str(auto_disk_config)
 
         return server
 

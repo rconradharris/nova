@@ -124,11 +124,19 @@ class Disk_config(extensions.ExtensionDescriptor):
         # about serialization--that would be handled exclusively by
         # middleware. Unfortunately, until we refactor extensions to better
         # support pre-processing extensions (puttinng in place an
-        # EagerDeserialization middleware similar to our LazySerialization), we'll
-        # need to keep this hack in place.
+        # EagerDeserialization middleware similar to our LazySerialization),
+        # we'll need to keep this hack in place.
 
         content_type = req.content_type
-        if content_type == 'applicaton/json':
+        if 'xml' in content_type:
+            node = minidom.parseString(req.body)
+            server = node.getElementsByTagName('server')[0]
+            api_value = server.getAttribute(self.API_DISK_CONFIG)
+            if api_value:
+                value = api_value == 'AUTO'
+                server.setAttribute(self.INTERNAL_DISK_CONFIG, str(value))
+                req.body = str(node.toxml())
+        else:
             body = utils.loads(req.body)
             server = body['server']
             api_value = server.get(self.API_DISK_CONFIG)
@@ -136,17 +144,9 @@ class Disk_config(extensions.ExtensionDescriptor):
                 value = api_value == 'AUTO'
                 server[self.INTERNAL_DISK_CONFIG] = value
                 req.body = utils.dumps(body)
-        else:
-            node = minidom.parseString(req.body)
-            server = node.getElementsByTagName('server')[0]
-            api_value = server.getAttribute(self.API_DISK_CONFIG)
-            if api_value:
-                value = api_value == 'AUTO'
-                server.setAttribute(self.INTERNAL_DISK_CONFIG, str(value)) 
-                req.body = str(node.toxml())
 
     def get_request_extensions(self):
-        ReqExt = extensions.RequestExtension 
+        ReqExt = extensions.RequestExtension
         return [
             ReqExt(method='GET',
                    url_route='/:(project_id)/servers/:(id)',

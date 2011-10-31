@@ -62,6 +62,7 @@ XPATH_NS = {
 
 stub_instance = fakes.stub_instance
 
+
 def get_fake_uuid(token=0):
     if not token in FAKE_UUIDS:
         FAKE_UUIDS[token] = str(utils.gen_uuid())

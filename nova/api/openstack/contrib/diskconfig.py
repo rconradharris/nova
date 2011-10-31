@@ -31,6 +31,7 @@ from nova.api.openstack import wsgi
 
 LOG = logging.getLogger('nova.api.openstack.contrib.disk_config')
 
+
 # FIXME(sirp): this is the old disk_config module, remove
 class DiskConfigController(object):
     def __init__(self):

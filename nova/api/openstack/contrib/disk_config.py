@@ -85,14 +85,13 @@ class Disk_config(extensions.ExtensionDescriptor):
         context = req.environ['nova.context']
         servers = body['servers'] if 'servers' in body else [body['server']]
         for server in servers:
-            if self.INTERNAL_DISK_CONFIG in server:
-                # TODO(sirp): it would be nice to eliminate this extra lookup
-                db_server = self.compute_api.routing_get(context, server['id'])
+            # TODO(sirp): it would be nice to eliminate this extra lookup
+            db_server = self.compute_api.routing_get(context, server['id'])
 
-                value = db_server[self.INTERNAL_DISK_CONFIG]
-                api_value = 'AUTO' if value else 'MANUAL'
+            value = db_server[self.INTERNAL_DISK_CONFIG]
+            api_value = 'AUTO' if value else 'MANUAL'
 
-                server[self.API_DISK_CONFIG] = api_value
+            server[self.API_DISK_CONFIG] = api_value
 
         return res
 

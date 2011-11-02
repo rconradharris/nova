@@ -271,31 +271,31 @@ class ComputeDriver(object):
         # TODO(Vek): Need to pass context in for access to auth_token
         raise NotImplementedError()
 
-    def pause(self, instance, callback):
+    def pause(self, instance):
         """Pause the specified instance."""
         # TODO(Vek): Need to pass context in for access to auth_token
         raise NotImplementedError()
 
-    def unpause(self, instance, callback):
+    def unpause(self, instance):
         """Unpause paused VM instance"""
         # TODO(Vek): Need to pass context in for access to auth_token
         raise NotImplementedError()
 
-    def suspend(self, instance, callback):
+    def suspend(self, instance):
         """suspend the specified instance"""
         # TODO(Vek): Need to pass context in for access to auth_token
         raise NotImplementedError()
 
-    def resume(self, instance, callback):
+    def resume(self, instance):
         """resume the specified instance"""
         # TODO(Vek): Need to pass context in for access to auth_token
         raise NotImplementedError()
 
-    def rescue(self, context, instance, callback, network_info):
+    def rescue(self, context, instance, network_info):
         """Rescue the specified instance"""
         raise NotImplementedError()
 
-    def unrescue(self, instance, callback, network_info):
+    def unrescue(self, instance, network_info):
         """Unrescue the specified instance"""
         # TODO(Vek): Need to pass context in for access to auth_token
         raise NotImplementedError()
@@ -396,7 +396,7 @@ class ComputeDriver(object):
 
         When this is called, rules have either been added or removed from the
         datastore.  You can retrieve rules with
-        :method:`nova.db.api.provider_fw_rule_get_all`.
+        :method:`nova.db.provider_fw_rule_get_all`.
 
         Provider rules take precedence over security group rules.  If an IP
         would be allowed by a security group ingress rule, but blocked by

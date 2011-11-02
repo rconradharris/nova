@@ -238,58 +238,43 @@ class CloudController(object):
             utils.runthis(_("Generating root CA: %s"), "sh", genrootca_sh_path)
             os.chdir(start)
 
-    def _get_floaters_for_fixed_ip(self, context, fixed_ip):
-        """Return all floating IPs given a fixed IP"""
-        return self.network_api.get_floating_ips_by_fixed_address(context,
-                fixed_ip)
-
-    def _get_fixed_ips_for_instance(self, context, instance):
+    def _get_ip_info_for_instance(self, context, instance):
         """Return a list of all fixed IPs for an instance"""
 
-        ret_ips = []
-        ret_ip6s = []
-        nw_info = self.network_api.get_instance_nw_info(context, instance)
-        for net, info in nw_info:
-            if not info:
+        ip_info = dict(fixed_ips=[], fixed_ip6s=[], floating_ips=[])
+
+        fixed_ips = instance['fixed_ips']
+        for fixed_ip in fixed_ips:
+            fixed_addr = fixed_ip['address']
+            network = fixed_ip.get('network')
+            vif = fixed_ip.get('virtual_interface')
+            if not network or not vif:
+                name = instance['name']
+                ip = fixed_ip['address']
+                LOG.warn(_("Instance %(name)s has stale IP "
+                        "address: %(ip)s (no network or vif)") % locals())
                 continue
-            ips = info.get('ips', [])
-            for ip in ips:
-                try:
-                    ret_ips.append(ip['ip'])
-                except KeyError:
-                    pass
-            if FLAGS.use_ipv6:
-                ip6s = info.get('ip6s', [])
-                for ip6 in ip6s:
-                    try:
-                        ret_ip6s.append(ip6['ip'])
-                    except KeyError:
-                        pass
-        return (ret_ips, ret_ip6s)
+            cidr_v6 = network.get('cidr_v6')
+            if FLAGS.use_ipv6 and cidr_v6:
+                ipv6_addr = ipv6.to_global(cidr_v6, vif['address'],
+                        network['project_id'])
+                if ipv6_addr not in ip_info['fixed_ip6s']:
+                    ip_info['fixed_ip6s'].append(ipv6_addr)
 
-    def _get_floaters_for_instance(self, context, instance, return_all=True):
-        """Return all floating IPs for an instance"""
-
-        ret_floaters = []
-        # only loop through ipv4 addresses
-        fixed_ips = self._get_fixed_ips_for_instance(context, instance)[0]
-        for ip in fixed_ips:
-            floaters = self._get_floaters_for_fixed_ip(context, ip)
-            # Allows a short circuit if we just need any floater.
-            if floaters and not return_all:
-                return floaters
-            ret_floaters.extend(floaters)
-            if floaters and only_one:
-                return ret_floaters
-        return ret_floaters
+            for floating_ip in fixed_ip.get('floating_ips', []):
+                float_addr = floating_ip['address']
+                ip_info['floating_ips'].append(float_addr)
+            ip_info['fixed_ips'].append(fixed_addr)
+        return ip_info
 
     def _get_mpi_data(self, context, project_id):
         result = {}
         search_opts = {'project_id': project_id, 'deleted': False}
         for instance in self.compute_api.get_all(context,
                 search_opts=search_opts):
+            ip_info = self._get_ip_info_for_instance(context, instance)
             # only look at ipv4 addresses
-            fixed_ips = self._get_fixed_ips_for_instance(context, instance)[0]
+            fixed_ips = ip_info['fixed_ips']
             if fixed_ips:
                 line = '%s slots=%d' % (fixed_ips[0], instance['vcpus'])
                 key = str(instance['key_name'])
@@ -378,9 +363,9 @@ class CloudController(object):
         host = instance_ref['host']
         availability_zone = self._get_availability_zone_by_host(ctxt, host)
 
-        floaters = self._get_floaters_for_instance(ctxt, instance_ref,
-                return_all=False)
-        floating_ip = floaters and floaters[0] or ''
+        ip_info = self._get_ip_info_for_instance(ctxt, instance_ref)
+        floating_ips = ip_info['floating_ips']
+        floating_ip = floating_ips and floating_ips[0] or ''
 
         ec2_id = ec2utils.id_to_ec2_id(instance_ref['id'])
         image_ec2_id = self.image_ec2_id(instance_ref['image_ref'])
@@ -1106,17 +1091,19 @@ class CloudController(object):
                 'status': volume['attach_status'],
                 'volumeId': ec2utils.id_to_ec2_vol_id(volume_id)}
 
-    def _format_kernel_id(self, instance_ref, result, key):
-        kernel_id = instance_ref['kernel_id']
-        if kernel_id is None:
+    def _format_kernel_id(self, context, instance_ref, result, key):
+        kernel_uuid = instance_ref['kernel_id']
+        if kernel_uuid is None or kernel_uuid == '':
             return
-        result[key] = self.image_ec2_id(instance_ref['kernel_id'], 'aki')
+        kernel_id = self._get_image_id(context, kernel_uuid)
+        result[key] = self.image_ec2_id(kernel_id, 'aki')
 
-    def _format_ramdisk_id(self, instance_ref, result, key):
-        ramdisk_id = instance_ref['ramdisk_id']
-        if ramdisk_id is None:
+    def _format_ramdisk_id(self, context, instance_ref, result, key):
+        ramdisk_uuid = instance_ref['ramdisk_id']
+        if ramdisk_uuid is None or ramdisk_uuid == '':
             return
-        result[key] = self.image_ec2_id(instance_ref['ramdisk_id'], 'ari')
+        ramdisk_id = self._get_image_id(context, ramdisk_uuid)
+        result[key] = self.image_ec2_id(ramdisk_id, 'ari')
 
     @staticmethod
     def _format_user_data(instance_ref):
@@ -1155,10 +1142,10 @@ class CloudController(object):
             self._format_instance_type(instance, result)
 
         def _format_attr_kernel(instance, result):
-            self._format_kernel_id(instance, result, 'kernel')
+            self._format_kernel_id(context, instance, result, 'kernel')
 
         def _format_attr_ramdisk(instance, result):
-            self._format_ramdisk_id(instance, result, 'ramdisk')
+            self._format_ramdisk_id(context, instance, result, 'ramdisk')
 
         def _format_attr_root_device_name(instance, result):
             self._format_instance_root_device_name(instance, result)
@@ -1300,29 +1287,24 @@ class CloudController(object):
             instance_id = instance['id']
             ec2_id = ec2utils.id_to_ec2_id(instance_id)
             i['instanceId'] = ec2_id
-            i['imageId'] = self.image_ec2_id(instance['image_ref'])
-            self._format_kernel_id(instance, i, 'kernelId')
-            self._format_ramdisk_id(instance, i, 'ramdiskId')
+            image_uuid = instance['image_ref']
+            image_id = self._get_image_id(context, image_uuid)
+            i['imageId'] = self.image_ec2_id(image_id)
+            self._format_kernel_id(context, instance, i, 'kernelId')
+            self._format_ramdisk_id(context, instance, i, 'ramdiskId')
             i['instanceState'] = {
                 'code': instance['power_state'],
                 'name': state_description_from_vm_state(instance['vm_state'])}
 
             fixed_ip = None
             floating_ip = None
-            (fixed_ips, fixed_ip6s) = self._get_fixed_ips_for_instance(context,
-                    instance)
-            if fixed_ips:
-                fixed_ip = fixed_ips[0]
-                # Now look for a floater.
-                for ip in fixed_ips:
-                    floating_ips = self._get_floaters_for_fixed_ip(context, ip)
-                    # NOTE(comstud): Will it float?
-                    if floating_ips:
-                        floating_ip = floating_ips[0]
-                        # Got one, exit out.
-                        break
-            if fixed_ip6s:
-                i['dnsNameV6'] = fixed_ip6s[0]
+            ip_info = self._get_ip_info_for_instance(context, instance)
+            if ip_info['fixed_ips']:
+                fixed_ip = ip_info['fixed_ips'][0]
+            if ip_info['floating_ips']:
+                floating_ip = ip_info['floating_ips'][0]
+            if ip_info['fixed_ip6s']:
+                i['dnsNameV6'] = ip_info['fixed_ip6s'][0]
             i['privateDnsName'] = fixed_ip
             i['privateIpAddress'] = fixed_ip
             i['publicDnsName'] = floating_ip
@@ -1421,14 +1403,16 @@ class CloudController(object):
         max_count = int(kwargs.get('max_count', 1))
         if kwargs.get('kernel_id'):
             kernel = self._get_image(context, kwargs['kernel_id'])
-            kwargs['kernel_id'] = kernel['id']
+            kwargs['kernel_id'] = self._get_image_uuid(context, kernel['id'])
         if kwargs.get('ramdisk_id'):
             ramdisk = self._get_image(context, kwargs['ramdisk_id'])
-            kwargs['ramdisk_id'] = ramdisk['id']
+            kwargs['ramdisk_id'] = self._get_image_uuid(context,
+                                                        ramdisk['id'])
         for bdm in kwargs.get('block_device_mapping', []):
             _parse_block_device_mapping(bdm)
 
         image = self._get_image(context, kwargs['image_id'])
+        image_uuid = self._get_image_uuid(context, image['id'])
 
         if image:
             image_state = self._get_image_state(image)
@@ -1441,7 +1425,7 @@ class CloudController(object):
         (instances, resv_id) = self.compute_api.create(context,
             instance_type=instance_types.get_instance_type_by_name(
                 kwargs.get('instance_type', None)),
-            image_href=self._get_image(context, kwargs['image_id'])['id'],
+            image_href=image_uuid,
             min_count=int(kwargs.get('min_count', max_count)),
             max_count=max_count,
             kernel_id=kwargs.get('kernel_id'),
@@ -1453,10 +1437,7 @@ class CloudController(object):
             security_group=kwargs.get('security_group'),
             availability_zone=kwargs.get('placement', {}).get(
                                   'AvailabilityZone'),
-            block_device_mapping=kwargs.get('block_device_mapping', {}),
-            # NOTE(comstud): Unfortunately, EC2 requires that the
-            # instance DB entries have been created..
-            wait_for_instances=True)
+            block_device_mapping=kwargs.get('block_device_mapping', {}))
         return self._format_run_instances(context, resv_id)
 
     def _do_instance(self, action, context, ec2_id):
@@ -1538,7 +1519,7 @@ class CloudController(object):
         """Returns image ec2_id using id and three letter type."""
         template = image_type + '-%08x'
         try:
-            return ec2utils.id_to_ec2_id(int(image_id), template=template)
+            return ec2utils.id_to_ec2_id(image_id, template=template)
         except ValueError:
             #TODO(wwolf): once we have ec2_id -> glance_id mapping
             # in place, this wont be necessary
@@ -1557,6 +1538,15 @@ class CloudController(object):
         if self._image_type(image.get('container_format')) != image_type:
             raise exception.ImageNotFound(image_id=ec2_id)
         return image
+
+    # NOTE(bcwaldon): We need access to the image uuid since we directly
+    # call the compute api from this class
+    def _get_image_uuid(self, context, internal_id):
+        return self.image_service.get_image_uuid(context, internal_id)
+
+    # NOTE(bcwaldon): We also need to be able to map image uuids to integers
+    def _get_image_id(self, context, image_uuid):
+        return self.image_service.get_image_id(context, image_uuid)
 
     def _format_image(self, image):
         """Convert from format defined by GlanceImageService to S3 format."""

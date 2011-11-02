@@ -45,6 +45,7 @@ LOG = logging.getLogger('nova.compute.api')
 
 
 FLAGS = flags.FLAGS
+flags.DECLARE('enable_zone_routing', 'nova.scheduler.api')
 flags.DECLARE('vncproxy_topic', 'nova.vnc')
 flags.DEFINE_integer('find_host_timeout', 30,
                      'Timeout after NN seconds when looking for a host.')
@@ -189,9 +190,8 @@ class API(base.Base):
                injected_files, admin_password, zone_blob,
                reservation_id, access_ip_v4, access_ip_v6,
                requested_networks, config_drive,
-               block_device_mapping,
-               wait_for_instances,
-               auto_disk_config):
+               block_device_mapping, auto_disk_config,
+               create_instance_here=False):
         """Verify all the input parameters regardless of the provisioning
         strategy being performed and schedule the instance(s) for
         creation."""
@@ -330,10 +330,18 @@ class API(base.Base):
 
         LOG.debug(_("Going to run %s instances...") % num_instances)
 
-        if wait_for_instances:
-            rpc_method = rpc.call
-        else:
+        if create_instance_here:
+            instance = self.create_db_entry_for_new_instance(
+                    context, instance_type, image, base_options,
+                    security_group, block_device_mapping)
+            # Tells scheduler we created the instance already.
+            base_options['id'] = instance['id']
             rpc_method = rpc.cast
+        else:
+            # We need to wait for the scheduler to create the instance
+            # DB entries, because the instance *could* be # created in
+            # a child zone.
+            rpc_method = rpc.call
 
         # TODO(comstud): We should use rpc.multicall when we can
         # retrieve the full instance dictionary from the scheduler.
@@ -349,6 +357,8 @@ class API(base.Base):
                 num_instances, requested_networks,
                 block_device_mapping, security_group)
 
+        if create_instance_here:
+            return ([instance], reservation_id)
         return (instances, reservation_id)
 
     @staticmethod
@@ -540,7 +550,7 @@ class API(base.Base):
                reservation_id=None, block_device_mapping=None,
                access_ip_v4=None, access_ip_v6=None,
                requested_networks=None, config_drive=None,
-               wait_for_instances=True, auto_disk_config=None):
+               auto_disk_config=None):
         """
         Provision instances, sending instance information to the
         scheduler.  The scheduler will determine where the instance(s)
@@ -550,6 +560,13 @@ class API(base.Base):
         could be 'None' or a list of instance dicts depending on if
         we waited for information from the scheduler or not.
         """
+
+        # We can create the DB entry for the instance here if we're
+        # only going to create 1 instance and we're in a single
+        # zone deployment.  This speeds up API responses for builds
+        # as we don't need to wait for the scheduler.
+        create_instance_here = (max_count == 1 and
+                not FLAGS.enable_zone_routing)
 
         (instances, reservation_id) = self._create_instance(
                                context, instance_type,
@@ -561,12 +578,10 @@ class API(base.Base):
                                injected_files, admin_password, zone_blob,
                                reservation_id, access_ip_v4, access_ip_v6,
                                requested_networks, config_drive,
-                               block_device_mapping,
-                               wait_for_instances,
-                               auto_disk_config)
+                               block_device_mapping, auto_disk_config,
+                               create_instance_here=create_instance_here)
 
-        if instances is None:
-            # wait_for_instances must have been False
+        if create_instance_here or instances is None:
             return (instances, reservation_id)
 
         inst_ret_list = []
@@ -705,7 +720,11 @@ class API(base.Base):
                 context.project_id,
                 security_group_name)
         # check if the server exists
-        inst = self.db.instance_get(context, instance_id)
+        if utils.is_uuid_like(instance_id):
+            inst = self.db.instance_get_by_uuid(context, instance_id)
+        else:
+            inst = self.db.instance_get(context, instance_id)
+        instance_id = inst['id']
         #check if the security group is associated with the server
         if self._is_security_group_associated_with_server(security_group,
                                                         instance_id):
@@ -731,7 +750,11 @@ class API(base.Base):
                 context.project_id,
                 security_group_name)
         # check if the server exists
-        inst = self.db.instance_get(context, instance_id)
+        if utils.is_uuid_like(instance_id):
+            inst = self.db.instance_get_by_uuid(context, instance_id)
+        else:
+            inst = self.db.instance_get(context, instance_id)
+        instance_id = inst['id']
         #check if the security group is associated with the server
         if not self._is_security_group_associated_with_server(security_group,
                                                         instance_id):
@@ -923,7 +946,11 @@ class API(base.Base):
             instance = self.db.instance_get_by_uuid(context, uuid)
         else:
             instance = self.db.instance_get(context, instance_id)
-        return dict(instance.iteritems())
+
+        inst = dict(instance.iteritems())
+        # NOTE(comstud): Doesn't get returned with iteritems
+        inst['name'] = instance['name']
+        return inst
 
     @scheduler_api.reroute_compute("get")
     def routing_get(self, context, instance_id):
@@ -992,7 +1019,15 @@ class API(base.Base):
 
         local_zone_only = search_opts.get('local_zone_only', False)
 
-        instances = self._get_instances_by_filters(context, filters)
+        inst_models = self._get_instances_by_filters(context, filters)
+
+        # Convert the models to dictionaries
+        instances = []
+        for inst_model in inst_models:
+            instance = dict(inst_model.iteritems())
+            # NOTE(comstud): Doesn't get returned by iteritems
+            instance['name'] = inst_model['name']
+            instances.append(instance)
 
         if local_zone_only:
             return instances

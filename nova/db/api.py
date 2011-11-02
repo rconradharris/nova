@@ -158,6 +158,11 @@ def compute_node_get(context, compute_id, session=None):
     return IMPL.compute_node_get(context, compute_id)
 
 
+def compute_node_get_all(context, session=None):
+    """Get all computeNodes."""
+    return IMPL.compute_node_get_all(context)
+
+
 def compute_node_create(context, values):
     """Create a computeNode from the values dictionary."""
     return IMPL.compute_node_create(context, values)
@@ -355,6 +360,11 @@ def fixed_ip_associate_pool(context, network_id, instance_id=None, host=None):
 def fixed_ip_create(context, values):
     """Create a fixed ip from the values dictionary."""
     return IMPL.fixed_ip_create(context, values)
+
+
+def fixed_ip_bulk_create(context, ips):
+    """Create a lot of fixed ips from the values dictionary."""
+    return IMPL.fixed_ip_bulk_create(context, ips)
 
 
 def fixed_ip_disassociate(context, address):
@@ -1588,3 +1598,21 @@ def vsa_get_all(context):
 def vsa_get_all_by_project(context, project_id):
     """Get all Virtual Storage Array records by project ID."""
     return IMPL.vsa_get_all_by_project(context, project_id)
+
+
+###################
+
+
+def s3_image_get(context, image_id):
+    """Find local s3 image represented by the provided id"""
+    return IMPL.s3_image_get(context, image_id)
+
+
+def s3_image_get_by_uuid(context, image_uuid):
+    """Find local s3 image represented by the provided uuid"""
+    return IMPL.s3_image_get_by_uuid(context, image_uuid)
+
+
+def s3_image_create(context, image_uuid):
+    """Create local s3 image represented by provided uuid"""
+    return IMPL.s3_image_create(context, image_uuid)

@@ -340,7 +340,7 @@ def usage_from_instance(instance_ref, **kw):
     usage_info = dict(
           tenant_id=instance_ref['project_id'],
           user_id=instance_ref['user_id'],
-          instance_id=instance_ref['id'],
+          instance_id=instance_ref['uuid'],
           instance_type=instance_ref['instance_type']['name'],
           instance_type_id=instance_ref['instance_type_id'],
           display_name=instance_ref['display_name'],
@@ -1014,3 +1014,12 @@ def make_dev_path(dev, partition=None, base='/dev'):
 
 def RAISE_THIS(this):
     raise Exception(pprint.pformat(this))
+
+
+def total_seconds(td):
+    """Local total_seconds implementation for compatibility with python 2.6"""
+    if hasattr(td, 'total_seconds'):
+        return td.total_seconds()
+    else:
+        return ((td.days * 86400 + td.seconds) * 10 ** 6 +
+                td.microseconds) / 10.0 ** 6

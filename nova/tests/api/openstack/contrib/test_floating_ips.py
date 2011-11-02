@@ -89,6 +89,7 @@ def network_get_instance_nw_info(self, context, instance):
 def fake_instance_get(context, instance_id):
         return {
         "id": 1,
+        "name": 'fake',
         "user_id": 'fakeuser',
         "project_id": '123'}
 
@@ -120,7 +121,7 @@ class FloatingIpTest(test.TestCase):
                        network_api_disassociate)
         self.stubs.Set(network.api.API, "get_instance_nw_info",
                        network_get_instance_nw_info)
-        self.stubs.Set(db.api, 'instance_get',
+        self.stubs.Set(db, 'instance_get',
                        fake_instance_get)
 
         self.context = context.get_admin_context()

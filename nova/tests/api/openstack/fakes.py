@@ -73,7 +73,8 @@ def fake_wsgi(self, req):
 
 
 def wsgi_app(inner_app11=None, fake_auth=True, fake_auth_context=None,
-        serialization=os_wsgi.LazySerializationMiddleware):
+        serialization=os_wsgi.LazySerializationMiddleware,
+        use_no_auth=False):
     if not inner_app11:
         inner_app11 = openstack.APIRouter()
 
@@ -83,6 +84,11 @@ def wsgi_app(inner_app11=None, fake_auth=True, fake_auth_context=None,
         else:
             ctxt = context.RequestContext('fake', 'fake', auth_token=True)
         api11 = openstack.FaultWrapper(api_auth.InjectContext(ctxt,
+              limits.RateLimitingMiddleware(
+                  serialization(
+                      extensions.ExtensionMiddleware(inner_app11)))))
+    elif use_no_auth:
+        api11 = openstack.FaultWrapper(auth.NoAuthMiddleware(
               limits.RateLimitingMiddleware(
                   serialization(
                       extensions.ExtensionMiddleware(inner_app11)))))
@@ -112,10 +118,10 @@ def stub_out_key_pair_funcs(stubs, have_key_pair=True):
         return []
 
     if have_key_pair:
-        stubs.Set(nova.db.api, 'key_pair_get_all_by_user', key_pair)
-        stubs.Set(nova.db.api, 'key_pair_get', one_key_pair)
+        stubs.Set(nova.db, 'key_pair_get_all_by_user', key_pair)
+        stubs.Set(nova.db, 'key_pair_get', one_key_pair)
     else:
-        stubs.Set(nova.db.api, 'key_pair_get_all_by_user', no_key_pair)
+        stubs.Set(nova.db, 'key_pair_get_all_by_user', no_key_pair)
 
 
 def stub_out_image_service(stubs):

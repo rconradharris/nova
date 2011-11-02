@@ -297,6 +297,8 @@ DEFINE_integer('glance_port', 9292, 'default glance port')
 DEFINE_list('glance_api_servers',
             ['%s:%d' % (FLAGS.glance_host, FLAGS.glance_port)],
             'list of glance api servers available to nova (host:port)')
+DEFINE_integer('glance_num_retries', 0,
+               'The number of times to retry downloading an image from glance')
 DEFINE_integer('s3_port', 3333, 's3 port')
 DEFINE_string('s3_host', '$my_ip', 's3 host (for infrastructure)')
 DEFINE_string('s3_dmz', '$my_ip', 's3 dmz ip (for instances)')
@@ -313,7 +315,7 @@ DEFINE_string('ajax_console_proxy_url',
               'http://127.0.0.1:8000',
               'location of ajax console proxy, \
                in the form "http://127.0.0.1:8000"')
-DEFINE_string('ajax_console_proxy_port',
+DEFINE_integer('ajax_console_proxy_port',
                8000, 'port that ajax_console_proxy binds')
 DEFINE_string('vsa_topic', 'vsa', 'the topic that nova-vsa service listens on')
 DEFINE_bool('verbose', False, 'show debug output')
@@ -360,7 +362,7 @@ DEFINE_string('null_kernel', 'nokernel',
               'kernel image that indicates not to use a kernel,'
               ' but to use a raw disk image instead')
 
-DEFINE_integer('vpn_image_id', 0, 'integer id for cloudpipe vpn server')
+DEFINE_string('vpn_image_id', '0', 'image id for cloudpipe vpn server')
 DEFINE_string('vpn_key_suffix',
               '-vpn',
               'Suffix to add to project name for vpn key and secgroups')
@@ -375,6 +377,7 @@ DEFINE_string('logdir', None, 'output to a per-service log file in named '
                               'directory')
 DEFINE_string('logfile_mode', '0644', 'Default file mode of the logs.')
 DEFINE_string('sqlite_db', 'nova.sqlite', 'file name for sqlite')
+DEFINE_bool('sqlite_synchronous', True, 'Synchronous mode for sqlite')
 DEFINE_string('sql_connection',
               'sqlite:///$state_path/$sqlite_db',
               'connection string for sql database')

@@ -24,7 +24,6 @@ from nova import exception
 from nova import quota
 from nova.volume import volume_types
 from nova.api.openstack import extensions
-from nova.api.openstack import faults
 from nova.api.openstack import wsgi
 
 
@@ -41,17 +40,17 @@ class VolumeTypesController(object):
         context = req.environ['nova.context']
 
         if not body or body == "":
-            return faults.Fault(exc.HTTPUnprocessableEntity())
+            raise exc.HTTPUnprocessableEntity()
 
         vol_type = body.get('volume_type', None)
         if vol_type is None or vol_type == "":
-            return faults.Fault(exc.HTTPUnprocessableEntity())
+            raise exc.HTTPUnprocessableEntity()
 
         name = vol_type.get('name', None)
         specs = vol_type.get('extra_specs', {})
 
         if name is None or name == "":
-            return faults.Fault(exc.HTTPUnprocessableEntity())
+            raise exc.HTTPUnprocessableEntity()
 
         try:
             volume_types.create(context, name, specs)
@@ -59,7 +58,7 @@ class VolumeTypesController(object):
         except quota.QuotaError as error:
             self._handle_quota_error(error)
         except exception.NotFound:
-            return faults.Fault(exc.HTTPNotFound())
+            raise exc.HTTPNotFound()
 
         return {'volume_type': vol_type}
 
@@ -70,7 +69,7 @@ class VolumeTypesController(object):
         try:
             vol_type = volume_types.get_volume_type(context, id)
         except exception.NotFound or exception.ApiError:
-            return faults.Fault(exc.HTTPNotFound())
+            raise exc.HTTPNotFound()
 
         return {'volume_type': vol_type}
 
@@ -82,7 +81,7 @@ class VolumeTypesController(object):
             vol_type = volume_types.get_volume_type(context, id)
             volume_types.destroy(context, vol_type['name'])
         except exception.NotFound:
-            return faults.Fault(exc.HTTPNotFound())
+            raise exc.HTTPNotFound()
 
     def _handle_quota_error(self, error):
         """Reraise quota errors as api-specific http exceptions."""
@@ -95,7 +94,7 @@ class VolumeTypeExtraSpecsController(object):
     """ The volume type extra specs API controller for the Openstack API """
 
     def _get_extra_specs(self, context, vol_type_id):
-        extra_specs = db.api.volume_type_extra_specs_get(context, vol_type_id)
+        extra_specs = db.volume_type_extra_specs_get(context, vol_type_id)
         specs_dict = {}
         for key, value in extra_specs.iteritems():
             specs_dict[key] = value
@@ -116,7 +115,7 @@ class VolumeTypeExtraSpecsController(object):
         context = req.environ['nova.context']
         specs = body.get('extra_specs')
         try:
-            db.api.volume_type_extra_specs_update_or_create(context,
+            db.volume_type_extra_specs_update_or_create(context,
                                                             vol_type_id,
                                                             specs)
         except quota.QuotaError as error:
@@ -133,7 +132,7 @@ class VolumeTypeExtraSpecsController(object):
             expl = _('Request body contains too many items')
             raise exc.HTTPBadRequest(explanation=expl)
         try:
-            db.api.volume_type_extra_specs_update_or_create(context,
+            db.volume_type_extra_specs_update_or_create(context,
                                                             vol_type_id,
                                                             body)
         except quota.QuotaError as error:
@@ -148,12 +147,12 @@ class VolumeTypeExtraSpecsController(object):
         if id in specs['extra_specs']:
             return {id: specs['extra_specs'][id]}
         else:
-            return faults.Fault(exc.HTTPNotFound())
+            raise exc.HTTPNotFound()
 
     def delete(self, req, vol_type_id, id):
         """ Deletes an existing extra spec """
         context = req.environ['nova.context']
-        db.api.volume_type_extra_specs_delete(context, vol_type_id, id)
+        db.volume_type_extra_specs_delete(context, vol_type_id, id)
 
     def _handle_quota_error(self, error):
         """Reraise quota errors as api-specific http exceptions."""

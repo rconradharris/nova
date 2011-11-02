@@ -129,7 +129,7 @@ def require_instance_exists(f):
     """
 
     def wrapper(context, instance_id, *args, **kwargs):
-        db.api.instance_get(context, instance_id)
+        db.instance_get(context, instance_id)
         return f(context, instance_id, *args, **kwargs)
     wrapper.__name__ = f.__name__
     return wrapper
@@ -143,7 +143,7 @@ def require_volume_exists(f):
     """
 
     def wrapper(context, volume_id, *args, **kwargs):
-        db.api.volume_get(context, volume_id)
+        db.volume_get(context, volume_id)
         return f(context, volume_id, *args, **kwargs)
     wrapper.__name__ = f.__name__
     return wrapper
@@ -364,6 +364,16 @@ def compute_node_get(context, compute_id, session=None):
         raise exception.ComputeHostNotFound(host=compute_id)
 
     return result
+
+
+@require_admin_context
+def compute_node_get_all(context, session=None):
+    if not session:
+        session = get_session()
+
+    return session.query(models.ComputeNode).\
+                    options(joinedload('service')).\
+                    filter_by(deleted=can_read_deleted(context))
 
 
 @require_admin_context
@@ -765,6 +775,16 @@ def fixed_ip_create(_context, values):
     fixed_ip_ref.update(values)
     fixed_ip_ref.save()
     return fixed_ip_ref['address']
+
+
+@require_context
+def fixed_ip_bulk_create(_context, ips):
+    session = get_session()
+    with session.begin():
+        for ip in ips:
+            model = models.FixedIp()
+            model.update(ip)
+            session.add(model)
 
 
 @require_context
@@ -1217,12 +1237,13 @@ def _build_instance_get(context, session=None):
         session = get_session()
 
     partial = session.query(models.Instance).\
-                     options(joinedload_all('fixed_ips.floating_ips')).\
-                     options(joinedload_all('fixed_ips.network')).\
-                     options(joinedload_all('security_groups.rules')).\
-                     options(joinedload('volumes')).\
-                     options(joinedload('metadata')).\
-                     options(joinedload('instance_type'))
+            options(joinedload_all('fixed_ips.floating_ips')).\
+            options(joinedload_all('fixed_ips.network')).\
+            options(joinedload_all('fixed_ips.virtual_interface')).\
+            options(joinedload_all('security_groups.rules')).\
+            options(joinedload('volumes')).\
+            options(joinedload('metadata')).\
+            options(joinedload('instance_type'))
 
     if is_admin_context(context):
         partial = partial.filter_by(deleted=can_read_deleted(context))
@@ -1287,10 +1308,13 @@ def instance_get_all_by_filters(context, filters):
 
     session = get_session()
     query_prefix = session.query(models.Instance).\
-                   options(joinedload('security_groups')).\
-                   options(joinedload('metadata')).\
-                   options(joinedload('instance_type')).\
-                   order_by(desc(models.Instance.created_at))
+            options(joinedload_all('fixed_ips.floating_ips')).\
+            options(joinedload_all('fixed_ips.network')).\
+            options(joinedload_all('fixed_ips.virtual_interface')).\
+            options(joinedload('security_groups')).\
+            options(joinedload('metadata')).\
+            options(joinedload('instance_type')).\
+            order_by(desc(models.Instance.created_at))
 
     # Make a copy of the filters dictionary to use going forward, as we'll
     # be modifying it and we shouldn't affect the caller's use of it.
@@ -1778,6 +1802,7 @@ def network_count_reserved_ips(context, network_id):
 @require_admin_context
 def network_create_safe(context, values):
     network_ref = models.Network()
+    network_ref['uuid'] = str(utils.gen_uuid())
     network_ref.update(values)
     try:
         network_ref.save()
@@ -4003,4 +4028,42 @@ def vsa_get_all_by_project(context, project_id):
                    all()
 
 
-    ####################
+####################
+
+
+def s3_image_get(context, image_id):
+    """Find local s3 image represented by the provided id"""
+    session = get_session()
+    res = session.query(models.S3Image)\
+                 .filter_by(id=image_id)\
+                 .first()
+
+    if not res:
+        raise exception.ImageNotFound(image_id=image_id)
+
+    return res
+
+
+def s3_image_get_by_uuid(context, image_uuid):
+    """Find local s3 image represented by the provided uuid"""
+    session = get_session()
+    res = session.query(models.S3Image)\
+                 .filter_by(uuid=image_uuid)\
+                 .first()
+
+    if not res:
+        raise exception.ImageNotFound(image_id=image_uuid)
+
+    return res
+
+
+def s3_image_create(context, image_uuid):
+    """Create local s3 image represented by provided uuid"""
+    try:
+        s3_image_ref = models.S3Image()
+        s3_image_ref.update({'uuid': image_uuid})
+        s3_image_ref.save()
+    except Exception, e:
+        raise exception.DBError(e)
+
+    return s3_image_ref

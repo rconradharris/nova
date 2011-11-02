@@ -496,13 +496,14 @@ class ComputeTestCase(test.TestCase):
         instance_id = self._create_instance()
         self.compute.run_instance(self.context, instance_id)
         self.assertEquals(len(test_notifier.NOTIFICATIONS), 1)
+        inst_ref = db.instance_get(self.context, instance_id)
         msg = test_notifier.NOTIFICATIONS[0]
         self.assertEquals(msg['priority'], 'INFO')
         self.assertEquals(msg['event_type'], 'compute.instance.create')
         payload = msg['payload']
         self.assertEquals(payload['tenant_id'], self.project_id)
         self.assertEquals(payload['user_id'], self.user_id)
-        self.assertEquals(payload['instance_id'], instance_id)
+        self.assertEquals(payload['instance_id'], inst_ref.uuid)
         self.assertEquals(payload['instance_type'], 'm1.tiny')
         type_id = instance_types.get_instance_type_by_name('m1.tiny')['id']
         self.assertEquals(str(payload['instance_type_id']), str(type_id))
@@ -515,6 +516,7 @@ class ComputeTestCase(test.TestCase):
     def test_terminate_usage_notification(self):
         """Ensure terminate_instance generates apropriate usage notification"""
         instance_id = self._create_instance()
+        inst_ref = db.instance_get(self.context, instance_id)
         self.compute.run_instance(self.context, instance_id)
         test_notifier.NOTIFICATIONS = []
         self.compute.terminate_instance(self.context, instance_id)
@@ -530,7 +532,7 @@ class ComputeTestCase(test.TestCase):
         payload = msg['payload']
         self.assertEquals(payload['tenant_id'], self.project_id)
         self.assertEquals(payload['user_id'], self.user_id)
-        self.assertEquals(payload['instance_id'], instance_id)
+        self.assertEquals(payload['instance_id'], inst_ref.uuid)
         self.assertEquals(payload['instance_type'], 'm1.tiny')
         type_id = instance_types.get_instance_type_by_name('m1.tiny')['id']
         self.assertEquals(str(payload['instance_type_id']), str(type_id))
@@ -613,7 +615,7 @@ class ComputeTestCase(test.TestCase):
         payload = msg['payload']
         self.assertEquals(payload['tenant_id'], self.project_id)
         self.assertEquals(payload['user_id'], self.user_id)
-        self.assertEquals(payload['instance_id'], instance_id)
+        self.assertEquals(payload['instance_id'], inst_ref.uuid)
         self.assertEquals(payload['instance_type'], 'm1.tiny')
         type_id = instance_types.get_instance_type_by_name('m1.tiny')['id']
         self.assertEquals(str(payload['instance_type_id']), str(type_id))
@@ -950,27 +952,27 @@ class ComputeTestCase(test.TestCase):
         instances = self.compute_api.get_all(c,
                 search_opts={'name': 'woo.*'})
         self.assertEqual(len(instances), 2)
-        instance_ids = [instance.id for instance in instances]
+        instance_ids = [instance['id'] for instance in instances]
         self.assertTrue(instance_id1 in instance_ids)
         self.assertTrue(instance_id2 in instance_ids)
 
         instances = self.compute_api.get_all(c,
                 search_opts={'name': 'woot.*'})
-        instance_ids = [instance.id for instance in instances]
+        instance_ids = [instance['id'] for instance in instances]
         self.assertEqual(len(instances), 1)
         self.assertTrue(instance_id1 in instance_ids)
 
         instances = self.compute_api.get_all(c,
                 search_opts={'name': '.*oot.*'})
         self.assertEqual(len(instances), 2)
-        instance_ids = [instance.id for instance in instances]
+        instance_ids = [instance['id'] for instance in instances]
         self.assertTrue(instance_id1 in instance_ids)
         self.assertTrue(instance_id3 in instance_ids)
 
         instances = self.compute_api.get_all(c,
                 search_opts={'name': 'n.*'})
         self.assertEqual(len(instances), 1)
-        instance_ids = [instance.id for instance in instances]
+        instance_ids = [instance['id'] for instance in instances]
         self.assertTrue(instance_id3 in instance_ids)
 
         instances = self.compute_api.get_all(c,
@@ -997,14 +999,14 @@ class ComputeTestCase(test.TestCase):
         instances = self.compute_api.get_all(c,
                 search_opts={'instance_name': '.*\-\d$'})
         self.assertEqual(len(instances), 2)
-        instance_ids = [instance.id for instance in instances]
+        instance_ids = [instance['id'] for instance in instances]
         self.assertTrue(instance_id1 in instance_ids)
         self.assertTrue(instance_id2 in instance_ids)
 
         instances = self.compute_api.get_all(c,
                 search_opts={'instance_name': 'i.*2'})
         self.assertEqual(len(instances), 1)
-        self.assertEqual(instances[0].id, instance_id2)
+        self.assertEqual(instances[0]['id'], instance_id2)
 
         db.instance_destroy(c, instance_id1)
         db.instance_destroy(c, instance_id2)
@@ -1035,7 +1037,7 @@ class ComputeTestCase(test.TestCase):
         instances = self.compute_api.get_all(c,
                 search_opts={'ip': '.*\.1', 'name': 'not.*'})
         self.assertEqual(len(instances), 1)
-        self.assertEqual(instances[0].id, instance_id3)
+        self.assertEqual(instances[0]['id'], instance_id3)
 
         # ip ends up matching any ip with a '1' in the last octet..
         # so instance 1 and 3.. but name should only match #1
@@ -1043,7 +1045,7 @@ class ComputeTestCase(test.TestCase):
         instances = self.compute_api.get_all(c,
                 search_opts={'ip': '.*\.1$', 'name': '^woo.*'})
         self.assertEqual(len(instances), 1)
-        self.assertEqual(instances[0].id, instance_id1)
+        self.assertEqual(instances[0]['id'], instance_id1)
 
         # same as above but no match on name (name matches instance_id1
         # but the ip query doesn't
@@ -1057,7 +1059,7 @@ class ComputeTestCase(test.TestCase):
                              'name': 'not.*',
                              'ip6': '^.*12.*34.*'})
         self.assertEqual(len(instances), 1)
-        self.assertEqual(instances[0].id, instance_id3)
+        self.assertEqual(instances[0]['id'], instance_id3)
 
         db.instance_destroy(c, instance_id1)
         db.instance_destroy(c, instance_id2)
@@ -1082,12 +1084,12 @@ class ComputeTestCase(test.TestCase):
         instances = self.compute_api.get_all(c,
                 search_opts={'image': '1234'})
         self.assertEqual(len(instances), 1)
-        self.assertEqual(instances[0].id, instance_id1)
+        self.assertEqual(instances[0]['id'], instance_id1)
 
         instances = self.compute_api.get_all(c,
                 search_opts={'image': '4567'})
         self.assertEqual(len(instances), 2)
-        instance_ids = [instance.id for instance in instances]
+        instance_ids = [instance['id'] for instance in instances]
         self.assertTrue(instance_id2 in instance_ids)
         self.assertTrue(instance_id3 in instance_ids)
 
@@ -1132,12 +1134,12 @@ class ComputeTestCase(test.TestCase):
         instances = self.compute_api.get_all(c,
                 search_opts={'flavor': 3})
         self.assertEqual(len(instances), 1)
-        self.assertEqual(instances[0].id, instance_id1)
+        self.assertEqual(instances[0]['id'], instance_id1)
 
         instances = self.compute_api.get_all(c,
                 search_opts={'flavor': 1})
         self.assertEqual(len(instances), 2)
-        instance_ids = [instance.id for instance in instances]
+        instance_ids = [instance['id'] for instance in instances]
         self.assertTrue(instance_id2 in instance_ids)
         self.assertTrue(instance_id3 in instance_ids)
 
@@ -1167,12 +1169,12 @@ class ComputeTestCase(test.TestCase):
         instances = self.compute_api.get_all(c,
                 search_opts={'power_state': power_state.SHUTDOWN})
         self.assertEqual(len(instances), 1)
-        self.assertEqual(instances[0].id, instance_id1)
+        self.assertEqual(instances[0]['id'], instance_id1)
 
         instances = self.compute_api.get_all(c,
                 search_opts={'power_state': power_state.RUNNING})
         self.assertEqual(len(instances), 2)
-        instance_ids = [instance.id for instance in instances]
+        instance_ids = [instance['id'] for instance in instances]
         self.assertTrue(instance_id2 in instance_ids)
         self.assertTrue(instance_id3 in instance_ids)
 
@@ -1220,12 +1222,12 @@ class ComputeTestCase(test.TestCase):
         instances = self.compute_api.get_all(c,
                 search_opts={'metadata': {'key2': 'value2'}})
         self.assertEqual(len(instances), 1)
-        self.assertEqual(instances[0].id, instance_id2)
+        self.assertEqual(instances[0]['id'], instance_id2)
 
         instances = self.compute_api.get_all(c,
                 search_opts={'metadata': {'key3': 'value3'}})
         self.assertEqual(len(instances), 2)
-        instance_ids = [instance.id for instance in instances]
+        instance_ids = [instance['id'] for instance in instances]
         self.assertTrue(instance_id3 in instance_ids)
         self.assertTrue(instance_id4 in instance_ids)
 
@@ -1234,14 +1236,14 @@ class ComputeTestCase(test.TestCase):
                 search_opts={'metadata': {'key3': 'value3',
                                           'key4': 'value4'}})
         self.assertEqual(len(instances), 1)
-        self.assertEqual(instances[0].id, instance_id4)
+        self.assertEqual(instances[0]['id'], instance_id4)
 
         # multiple criterias as a list
         instances = self.compute_api.get_all(c,
                 search_opts={'metadata': [{'key4': 'value4'},
                                           {'key3': 'value3'}]})
         self.assertEqual(len(instances), 1)
-        self.assertEqual(instances[0].id, instance_id4)
+        self.assertEqual(instances[0]['id'], instance_id4)
 
         db.instance_destroy(c, instance_id0)
         db.instance_destroy(c, instance_id1)
@@ -1404,25 +1406,6 @@ class ComputeTestCase(test.TestCase):
             self.assertNotEqual(resv_id, None)
         finally:
             for instance in refs:
-                self.assertEqual(instance['reservation_id'], resv_id)
-                db.instance_destroy(self.context, instance['id'])
-
-    def test_reservation_ids_two_instances_no_wait(self):
-        """Verify building 2 instances at once without waiting for
-        instance IDs results in a reservation_id being returned equal
-        to reservation id set in both instances
-        """
-        (refs, resv_id) = self.compute_api.create(self.context,
-                instance_types.get_default_instance_type(), None,
-                min_count=2, max_count=2, wait_for_instances=False)
-        try:
-            self.assertEqual(refs, None)
-            self.assertNotEqual(resv_id, None)
-        finally:
-            instances = self.compute_api.get_all(self.context,
-                    search_opts={'reservation_id': resv_id})
-            self.assertEqual(len(instances), 2)
-            for instance in instances:
                 self.assertEqual(instance['reservation_id'], resv_id)
                 db.instance_destroy(self.context, instance['id'])
 

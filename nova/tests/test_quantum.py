@@ -61,6 +61,9 @@ class FakeQuantumClientConnection(object):
         except KeyError:
             return False
 
+    def get_network_name(self, tenant_id, net_id):
+        return self.nets[net_id]['net-name']
+
     def _confirm_not_attached(self, interface_id):
         for n in self.nets.values():
             for p in n['ports'].values():
@@ -201,7 +204,7 @@ class QuantumTestCaseBase(object):
         project_id = "fake_project1"
         ctx = context.RequestContext('user1', project_id)
 
-        instance_ref = db.api.instance_create(ctx,
+        instance_ref = db.instance_create(ctx,
                                     {"project_id": project_id})
         nw_info = self.net_man.allocate_for_instance(ctx,
                         instance_id=instance_ref['id'], host="",
@@ -246,7 +249,7 @@ class QuantumTestCaseBase(object):
 
         self.net_man.validate_networks(ctx, requested_networks)
 
-        instance_ref = db.api.instance_create(ctx,
+        instance_ref = db.instance_create(ctx,
                                     {"project_id": project_id})
         nw_info = self.net_man.allocate_for_instance(ctx,
                         instance_id=instance_ref['id'], host="",

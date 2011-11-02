@@ -508,22 +508,44 @@ class TestGlanceImageService(test.TestCase):
         self.assertEqual(image_meta['created_at'], self.NOW_DATETIME)
         self.assertEqual(image_meta['updated_at'], self.NOW_DATETIME)
 
+    def test_get_with_retries(self):
+        tries = [0]
+
+        class GlanceBusyException(Exception):
+            pass
+
+        class MyGlanceStubClient(glance_stubs.StubGlanceClient):
+            """A client that fails the first time, then succeeds."""
+            def get_image(self, image_id):
+                if tries[0] == 0:
+                    tries[0] = 1
+                    raise GlanceBusyException()
+                else:
+                    return {}, []
+
+        client = MyGlanceStubClient()
+        service = glance.GlanceImageService(client=client)
+        image_id = 1  # doesn't matter
+        writer = NullWriter()
+
+        # When retries are disabled, we should get an exception
+        self.flags(glance_num_retries=0)
+        self.assertRaises(GlanceBusyException, service.get, self.context,
+                          image_id, writer)
+
+        # Now lets enable retries. No exception should happen now.
+        self.flags(glance_num_retries=1)
+        service.get(self.context, image_id, writer)
+
     def test_glance_client_image_id(self):
         fixture = self._make_fixture(name='test image')
         image_id = self.service.create(self.context, fixture)['id']
         client, same_id = glance.get_glance_client(self.context, image_id)
-        self.assertEquals(same_id, int(image_id))
+        self.assertEquals(same_id, image_id)
 
     def test_glance_client_image_ref(self):
         fixture = self._make_fixture(name='test image')
         image_id = self.service.create(self.context, fixture)['id']
         image_url = 'http://foo/%s' % image_id
         client, same_id = glance.get_glance_client(self.context, image_url)
-        self.assertEquals(same_id, int(image_id))
-
-    def test_glance_client_invalid_image_ref(self):
-        fixture = self._make_fixture(name='test image')
-        image_id = self.service.create(self.context, fixture)['id']
-        image_url = 'khan'
-        self.assertRaises(exception.InvalidImageRef, glance.get_glance_client,
-                self.context, 'khan')
+        self.assertEquals(same_id, image_id)

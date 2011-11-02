@@ -46,6 +46,7 @@ INVALID_NETWORKS = [('invalid', 'invalid-ip-address')]
 
 INSTANCE = {
              "id": 1,
+             "name": "fake",
              "display_name": "test_server",
              "uuid": FAKE_UUID,
              "user_id": 'fake_user_id',
@@ -55,6 +56,7 @@ INSTANCE = {
              "security_groups": [{"id": 1, "name": "test"}],
              "progress": 0,
              "image_ref": 'http://foo.com/123',
+             "fixed_ips": [],
              "instance_type": {"flavorid": '124'},
         }
 
@@ -127,6 +129,7 @@ class CreateserverextTest(test.TestCase):
                          'project_id': 'fake',
                          'created_at': "",
                          'updated_at': "",
+                         'fixed_ips': [],
                          'progress': 0}], resv_id)
 
             def set_admin_password(self, *args, **kwargs):
@@ -135,10 +138,11 @@ class CreateserverextTest(test.TestCase):
         compute_api = MockComputeAPI()
         self.stubs.Set(nova.compute, 'API',
                        self._make_stub_method(compute_api))
+        image_uuid = 'cedef40a-ed67-4d10-800e-17455edce175'
         self.stubs.Set(
             nova.api.openstack.servers.Controller,
             '_get_kernel_ramdisk_from_image',
-            self._make_stub_method((1, 1)))
+            self._make_stub_method((image_uuid, image_uuid)))
         return compute_api
 
     def _setup_mock_network_api(self):
@@ -147,7 +151,7 @@ class CreateserverextTest(test.TestCase):
     def _create_security_group_request_dict(self, security_groups):
         server = {}
         server['name'] = 'new-server-test'
-        server['imageRef'] = 1
+        server['imageRef'] = 'cedef40a-ed67-4d10-800e-17455edce175'
         server['flavorRef'] = 1
         if security_groups is not None:
             sg_list = []
@@ -159,7 +163,7 @@ class CreateserverextTest(test.TestCase):
     def _create_networks_request_dict(self, networks):
         server = {}
         server['name'] = 'new-server-test'
-        server['imageRef'] = 1
+        server['imageRef'] = 'cedef40a-ed67-4d10-800e-17455edce175'
         server['flavorRef'] = 1
         if networks is not None:
             network_list = []
@@ -171,7 +175,7 @@ class CreateserverextTest(test.TestCase):
     def _create_user_data_request_dict(self, user_data):
         server = {}
         server['name'] = 'new-server-test'
-        server['imageRef'] = 1
+        server['imageRef'] = 'cedef40a-ed67-4d10-800e-17455edce175'
         server['flavorRef'] = 1
         server['user_data'] = user_data
         return {'server': server}
@@ -394,9 +398,9 @@ class CreateserverextTest(test.TestCase):
 
     def test_create_instance_with_security_group_json(self):
         security_groups = ['test', 'test1']
-        self.stubs.Set(nova.db.api, 'security_group_get_by_name',
+        self.stubs.Set(nova.db, 'security_group_get_by_name',
                        return_security_group_get_by_name)
-        self.stubs.Set(nova.db.api, 'instance_add_security_group',
+        self.stubs.Set(nova.db, 'instance_add_security_group',
                        return_instance_add_security_group)
         self._setup_mock_network_api()
         body_dict = self._create_security_group_request_dict(security_groups)
@@ -406,7 +410,7 @@ class CreateserverextTest(test.TestCase):
         self.assertEquals(response.status_int, 202)
 
     def test_get_server_by_id_verify_security_groups_json(self):
-        self.stubs.Set(nova.db.api, 'instance_get', return_server_by_id)
+        self.stubs.Set(nova.db, 'instance_get', return_server_by_id)
         self._setup_mock_network_api()
         req = webob.Request.blank('/v1.1/123/os-create-server-ext/1')
         req.headers['Content-Type'] = 'application/json'
@@ -418,7 +422,7 @@ class CreateserverextTest(test.TestCase):
                           expected_security_group)
 
     def test_get_server_by_id_verify_security_groups_xml(self):
-        self.stubs.Set(nova.db.api, 'instance_get', return_server_by_id)
+        self.stubs.Set(nova.db, 'instance_get', return_server_by_id)
         self._setup_mock_network_api()
         req = webob.Request.blank('/v1.1/123/os-create-server-ext/1')
         req.headers['Accept'] = 'application/xml'

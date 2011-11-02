@@ -17,6 +17,7 @@
 #    under the License.
 
 import base64
+import copy
 import functools
 import os
 
@@ -50,11 +51,40 @@ flags.DEFINE_string('ajax_proxy_manager',
         'nova.tests.api.ec2.test_cloud.AjaxProxyManager', '')
 
 
-# Fake ajax proxy service, so that an 'rpc.call' will work.
 class AjaxProxyManager(manager.SchedulerDependentManager):
+    """Fake ajax proxy service, so that an 'rpc.call' will work."""
     @staticmethod
     def authorize_ajax_console(context, **kwargs):
         return None
+
+
+def get_fake_fixed_ips():
+    vif = {'address': 'aa:bb:cc:dd:ee:ff'}
+    network = {'label': 'private',
+               'project_id': 'fake',
+               'cidr_v6': 'fe80:b33f::/64'}
+    floating_ips = [{'address': '1.2.3.4'},
+                    {'address': '5.6.7.8'}]
+    fixed_ip1 = {'address': '192.168.0.3',
+                 'floating_ips': floating_ips,
+                 'virtual_interface': vif,
+                 'network': network}
+    fixed_ip2 = {'address': '192.168.0.4',
+                 'network': network}
+    return [fixed_ip1, fixed_ip2]
+
+
+def get_instances_with_fixed_ips(orig_func, *args, **kwargs):
+    """Kludge fixed_ips into instance(s) without having to create DB
+    entries
+    """
+    instances = orig_func(*args, **kwargs)
+    if isinstance(instances, list):
+        for instance in instances:
+            instance['fixed_ips'] = get_fake_fixed_ips()
+    else:
+        instances['fixed_ips'] = get_fake_fixed_ips()
+    return instances
 
 
 class CloudTestCase(test.TestCase):
@@ -81,9 +111,13 @@ class CloudTestCase(test.TestCase):
                                               True)
 
         def fake_show(meh, context, id):
-            return {'id': 1, 'container_format': 'ami',
-                    'properties': {'kernel_id': 1, 'ramdisk_id': 1,
-                    'type': 'machine', 'image_state': 'available'}}
+            return {'id': id,
+                    'container_format': 'ami',
+                    'properties': {
+                        'kernel_id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                        'ramdisk_id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                        'type': 'machine',
+                        'image_state': 'available'}}
 
         self.stubs.Set(fake._FakeImageService, 'show', fake_show)
         self.stubs.Set(fake._FakeImageService, 'show_by_name', fake_show)
@@ -91,6 +125,19 @@ class CloudTestCase(test.TestCase):
         # NOTE(comstud): Make 'cast' behave like a 'call' which will
         # ensure that operations complete
         self.stubs.Set(rpc, 'cast', rpc.call)
+
+        # make sure we can map ami-00000001/2 to a uuid in FakeImageService
+        db.api.s3_image_create(self.context,
+                               'cedef40a-ed67-4d10-800e-17455edce175')
+        db.api.s3_image_create(self.context,
+                               '76fa36fc-c930-4bf3-8c8a-ea2a2420deb6')
+
+    def _stub_instance_get_with_fixed_ips(self, func_name):
+        orig_func = getattr(self.cloud.compute_api, func_name)
+
+        def fake_get(*args, **kwargs):
+            return get_instances_with_fixed_ips(orig_func, *args, **kwargs)
+        self.stubs.Set(self.cloud.compute_api, func_name, fake_get)
 
     def _create_key(self, name):
         # NOTE(vish): create depends on pool, so just call helper directly
@@ -501,27 +548,17 @@ class CloudTestCase(test.TestCase):
         """Makes sure describe_instances works and filters results."""
         self.flags(use_ipv6=True)
 
-        def fake_get_instance_nw_info(self, context, instance):
-            return [(None, {'label': 'public',
-                            'ips': [{'ip': '192.168.0.3'},
-                                    {'ip': '192.168.0.4'}],
-                            'ip6s': [{'ip': 'fe80::beef'}]})]
+        self._stub_instance_get_with_fixed_ips('get_all')
+        self._stub_instance_get_with_fixed_ips('get')
 
-        def fake_get_floating_ips_by_fixed_address(self, context, fixed_ip):
-            return ['1.2.3.4', '5.6.7.8']
-
-        self.stubs.Set(network.API, 'get_instance_nw_info',
-                fake_get_instance_nw_info)
-        self.stubs.Set(network.API, 'get_floating_ips_by_fixed_address',
-                fake_get_floating_ips_by_fixed_address)
-
+        image_uuid = 'cedef40a-ed67-4d10-800e-17455edce175'
         inst1 = db.instance_create(self.context, {'reservation_id': 'a',
-                                                  'image_ref': 1,
+                                                  'image_ref': image_uuid,
                                                   'instance_type_id': 1,
                                                   'host': 'host1',
                                                   'vm_state': 'active'})
         inst2 = db.instance_create(self.context, {'reservation_id': 'a',
-                                                  'image_ref': 1,
+                                                  'image_ref': image_uuid,
                                                   'instance_type_id': 1,
                                                   'host': 'host2',
                                                   'vm_state': 'active'})
@@ -550,7 +587,8 @@ class CloudTestCase(test.TestCase):
         self.assertEqual(instance['dnsName'], '1.2.3.4')
         self.assertEqual(instance['privateDnsName'], '192.168.0.3')
         self.assertEqual(instance['privateIpAddress'], '192.168.0.3')
-        self.assertEqual(instance['dnsNameV6'], 'fe80::beef')
+        self.assertEqual(instance['dnsNameV6'],
+                'fe80:b33f::a8bb:ccff:fedd:eeff')
         db.instance_destroy(self.context, inst1['id'])
         db.instance_destroy(self.context, inst2['id'])
         db.service_destroy(self.context, comp1['id'])
@@ -560,22 +598,12 @@ class CloudTestCase(test.TestCase):
         """Makes sure describe_instances w/ no ipv6 works."""
         self.flags(use_ipv6=False)
 
-        def fake_get_instance_nw_info(self, context, instance):
-            return [(None, {'label': 'public',
-                            'ips': [{'ip': '192.168.0.3'},
-                                    {'ip': '192.168.0.4'}],
-                            'ip6s': [{'ip': 'fe80::beef'}]})]
+        self._stub_instance_get_with_fixed_ips('get_all')
+        self._stub_instance_get_with_fixed_ips('get')
 
-        def fake_get_floating_ips_by_fixed_address(self, context, fixed_ip):
-            return ['1.2.3.4', '5.6.7.8']
-
-        self.stubs.Set(network.API, 'get_instance_nw_info',
-                fake_get_instance_nw_info)
-        self.stubs.Set(network.API, 'get_floating_ips_by_fixed_address',
-                fake_get_floating_ips_by_fixed_address)
-
+        image_uuid = 'cedef40a-ed67-4d10-800e-17455edce175'
         inst1 = db.instance_create(self.context, {'reservation_id': 'a',
-                                                  'image_ref': 1,
+                                                  'image_ref': image_uuid,
                                                   'instance_type_id': 1,
                                                   'vm_state': 'active'})
         comp1 = db.service_create(self.context, {'host': 'host1',
@@ -596,14 +624,15 @@ class CloudTestCase(test.TestCase):
         db.service_destroy(self.context, comp1['id'])
 
     def test_describe_instances_deleted(self):
+        image_uuid = 'cedef40a-ed67-4d10-800e-17455edce175'
         args1 = {'reservation_id': 'a',
-                 'image_ref': 1,
+                 'image_ref': image_uuid,
                  'instance_type_id': 1,
                  'host': 'host1',
                  'vm_state': 'active'}
         inst1 = db.instance_create(self.context, args1)
         args2 = {'reservation_id': 'b',
-                 'image_ref': 1,
+                 'image_ref': image_uuid,
                  'instance_type_id': 1,
                  'host': 'host1',
                  'vm_state': 'active'}
@@ -634,12 +663,13 @@ class CloudTestCase(test.TestCase):
         return volumes
 
     def _setUpBlockDeviceMapping(self):
+        image_uuid = 'cedef40a-ed67-4d10-800e-17455edce175'
         inst1 = db.instance_create(self.context,
-                                  {'image_ref': 1,
+                                  {'image_ref': image_uuid,
                                    'instance_type_id': 1,
                                    'root_device_name': '/dev/sdb1'})
         inst2 = db.instance_create(self.context,
-                                  {'image_ref': 2,
+                                  {'image_ref': image_uuid,
                                    'instance_type_id': 1,
                                    'root_device_name': '/dev/sdc1'})
 
@@ -799,9 +829,12 @@ class CloudTestCase(test.TestCase):
     def test_describe_images(self):
         describe_images = self.cloud.describe_images
 
-        def fake_detail(meh, context):
-            return [{'id': 1, 'container_format': 'ami',
-                     'properties': {'kernel_id': 1, 'ramdisk_id': 1,
+        def fake_detail(meh, context, **kwargs):
+            return [{'id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                     'container_format': 'ami',
+                     'properties': {
+                        'kernel_id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                        'ramdisk_id': 'cedef40a-ed67-4d10-800e-17455edce175',
                     'type': 'machine'}}]
 
         def fake_show_none(meh, context, id):
@@ -861,9 +894,9 @@ class CloudTestCase(test.TestCase):
             {'device_name': '/dev/sdc3', 'virtual_name': 'ephemeral6'},
             {'device_name': '/dev/sdc4', 'no_device': True}]
         image1 = {
-            'id': 1,
+            'id': 'cedef40a-ed67-4d10-800e-17455edce175',
             'properties': {
-                'kernel_id': 1,
+                'kernel_id': 'cedef40a-ed67-4d10-800e-17455edce175',
                 'type': 'machine',
                 'image_state': 'available',
                 'mappings': mappings1,
@@ -875,22 +908,23 @@ class CloudTestCase(test.TestCase):
         block_device_mapping2 = [{'device_name': '/dev/sdb1',
                                   'snapshot_id': 01234567}]
         image2 = {
-            'id': 2,
+            'id': '76fa36fc-c930-4bf3-8c8a-ea2a2420deb6',
             'properties': {
-                'kernel_id': 2,
+                'kernel_id': '76fa36fc-c930-4bf3-8c8a-ea2a2420deb6',
                 'type': 'machine',
                 'root_device_name': '/dev/sdb1',
                 'mappings': mappings2,
                 'block_device_mapping': block_device_mapping2}}
 
         def fake_show(meh, context, image_id):
-            for i in [image1, image2]:
-                if i['id'] == image_id:
+            _images = [copy.deepcopy(image1), copy.deepcopy(image2)]
+            for i in _images:
+                if str(i['id']) == str(image_id):
                     return i
             raise exception.ImageNotFound(image_id=image_id)
 
         def fake_detail(meh, context):
-            return [image1, image2]
+            return [copy.deepcopy(image1), copy.deepcopy(image2)]
 
         self.stubs.Set(fake._FakeImageService, 'show', fake_show)
         self.stubs.Set(fake._FakeImageService, 'detail', fake_detail)
@@ -979,14 +1013,16 @@ class CloudTestCase(test.TestCase):
         self.assertDictListUnorderedMatch(result['blockDeviceMapping'],
                                           self._expected_bdms2, 'deviceName')
 
-        self.stubs.UnsetAll()
-
     def test_describe_image_attribute(self):
         describe_image_attribute = self.cloud.describe_image_attribute
 
         def fake_show(meh, context, id):
-            return {'id': 1, 'properties': {'kernel_id': 1, 'ramdisk_id': 1,
-                    'type': 'machine'}, 'container_format': 'ami',
+            return {'id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                    'properties': {
+                        'kernel_id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                        'ramdisk_id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                        'type': 'machine'},
+                    'container_format': 'ami',
                     'is_public': True}
 
         self.stubs.Set(fake._FakeImageService, 'show', fake_show)
@@ -1024,9 +1060,14 @@ class CloudTestCase(test.TestCase):
     def test_modify_image_attribute(self):
         modify_image_attribute = self.cloud.modify_image_attribute
 
-        fake_metadata = {'id': 1, 'container_format': 'ami',
-                         'properties': {'kernel_id': 1, 'ramdisk_id': 1,
-                                        'type': 'machine'}, 'is_public': False}
+        fake_metadata = {
+            'id': 1,
+            'container_format': 'ami',
+            'properties': {
+                'kernel_id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                'ramdisk_id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                'type': 'machine'},
+            'is_public': False}
 
         def fake_show(meh, context, id):
             return fake_metadata
@@ -1158,10 +1199,25 @@ class CloudTestCase(test.TestCase):
         self.cloud.delete_key_pair(self.context, 'test')
 
     def test_run_instances(self):
-        kwargs = {'image_id': FLAGS.default_image,
+        kwargs = {'image_id': 'ami-00000001',
                   'instance_type': FLAGS.default_instance_type,
                   'max_count': 1}
         run_instances = self.cloud.run_instances
+
+        def fake_show(self, context, id):
+            return {'id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                    'properties': {
+                        'kernel_id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                        'type': 'machine'},
+                    'container_format': 'ami',
+                    'status': 'active'}
+
+        self.stubs.UnsetAll()
+        self.stubs.Set(fake._FakeImageService, 'show', fake_show)
+        # NOTE(comstud): Make 'cast' behave like a 'call' which will
+        # ensure that operations complete
+        self.stubs.Set(rpc, 'cast', rpc.call)
+
         result = run_instances(self.context, **kwargs)
         instance = result['instancesSet'][0]
         self.assertEqual(instance['imageId'], 'ami-00000001')
@@ -1171,13 +1227,16 @@ class CloudTestCase(test.TestCase):
         self.assertEqual(instance['instanceType'], 'm1.small')
 
     def test_run_instances_image_state_none(self):
-        kwargs = {'image_id': FLAGS.default_image,
+        kwargs = {'image_id': 'ami-00000001',
                   'instance_type': FLAGS.default_instance_type,
                   'max_count': 1}
         run_instances = self.cloud.run_instances
 
         def fake_show_no_state(self, context, id):
-            return {'id': 1, 'properties': {'kernel_id': 1, 'ramdisk_id': 1,
+            return {'id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                    'properties': {
+                        'kernel_id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                        'ramdisk_id': 'cedef40a-ed67-4d10-800e-17455edce175',
                     'type': 'machine'}, 'container_format': 'ami'}
 
         self.stubs.UnsetAll()
@@ -1186,14 +1245,17 @@ class CloudTestCase(test.TestCase):
                           self.context, **kwargs)
 
     def test_run_instances_image_state_invalid(self):
-        kwargs = {'image_id': FLAGS.default_image,
+        kwargs = {'image_id': 'ami-00000001',
                   'instance_type': FLAGS.default_instance_type,
                   'max_count': 1}
         run_instances = self.cloud.run_instances
 
         def fake_show_decrypt(self, context, id):
-            return {'id': 1, 'container_format': 'ami',
-                    'properties': {'kernel_id': 1, 'ramdisk_id': 1,
+            return {'id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                    'container_format': 'ami',
+                    'properties': {
+                        'kernel_id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                        'ramdisk_id': 'cedef40a-ed67-4d10-800e-17455edce175',
                     'type': 'machine', 'image_state': 'decrypting'}}
 
         self.stubs.UnsetAll()
@@ -1208,9 +1270,13 @@ class CloudTestCase(test.TestCase):
         run_instances = self.cloud.run_instances
 
         def fake_show_stat_active(self, context, id):
-            return {'id': 1, 'container_format': 'ami',
-                    'properties': {'kernel_id': 1, 'ramdisk_id': 1,
-                    'type': 'machine'}, 'status': 'active'}
+            return {'id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                    'container_format': 'ami',
+                    'properties': {
+                        'kernel_id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                        'ramdisk_id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                        'type': 'machine'},
+                    'status': 'active'}
 
         self.stubs.Set(fake._FakeImageService, 'show', fake_show_stat_active)
 
@@ -1633,8 +1699,8 @@ class CloudTestCase(test.TestCase):
                 'security_groups': [{'name': 'fake0'}, {'name': 'fake1'}],
                 'vm_state': vm_states.STOPPED,
                 'instance_type': {'name': 'fake_type'},
-                'kernel_id': 1,
-                'ramdisk_id': 2,
+                'kernel_id': 'cedef40a-ed67-4d10-800e-17455edce175',
+                'ramdisk_id': '76fa36fc-c930-4bf3-8c8a-ea2a2420deb6',
                 'user_data': 'fake-user data',
                 }
         self.stubs.Set(self.cloud.compute_api, 'get', fake_get)
@@ -1645,7 +1711,7 @@ class CloudTestCase(test.TestCase):
                         'attach_time': '13:56:24',
                         'status': 'in-use'}
             raise exception.VolumeNotFound(volume_id=volume_id)
-        self.stubs.Set(db.api, 'volume_get', fake_volume_get)
+        self.stubs.Set(db, 'volume_get', fake_volume_get)
 
         get_attribute = functools.partial(
             self.cloud.describe_instance_attribute,

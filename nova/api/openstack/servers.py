@@ -465,7 +465,6 @@ class Controller(object):
                             availability_zone=availability_zone,
                             config_drive=config_drive,
                             block_device_mapping=block_device_mapping,
-                            wait_for_instances=not ret_resv_id,
                             auto_disk_config=auto_disk_config)
         except quota.QuotaError as error:
             self._handle_quota_error(error)
@@ -500,7 +499,7 @@ class Controller(object):
             instance['instance_type'] = inst_type
             instance['image_ref'] = image_href
 
-        server = self._build_view(req, instance, is_detail=True)
+        server = self._build_view(req, instance, is_create=True)
         if '_is_precooked' in server['server']:
             del server['server']['_is_precooked']
         else:
@@ -751,7 +750,7 @@ class Controller(object):
 
         return common.get_id_from_href(flavor_ref)
 
-    def _build_view(self, req, instance, is_detail=False):
+    def _build_view(self, req, instance, is_detail=False, is_create=False):
         context = req.environ['nova.context']
         project_id = getattr(context, 'project_id', '')
         base_url = req.application_url
@@ -760,7 +759,9 @@ class Controller(object):
         addresses_builder = views_addresses.ViewBuilder()
         builder = views_servers.ViewBuilder(context, addresses_builder,
                 flavor_builder, image_builder, base_url, project_id)
-        return builder.build(instance, is_detail=is_detail)
+        return builder.build(instance,
+                             is_detail=is_detail,
+                             is_create=is_create)
 
     def _build_list(self, req, instances, is_detail=False):
         params = req.GET.copy()
@@ -784,11 +785,11 @@ class Controller(object):
         if (not 'changePassword' in input_dict
             or not 'adminPass' in input_dict['changePassword']):
             msg = _("No adminPass was specified")
-            return exc.HTTPBadRequest(explanation=msg)
+            raise exc.HTTPBadRequest(explanation=msg)
         password = input_dict['changePassword']['adminPass']
         if not isinstance(password, basestring) or password == '':
             msg = _("Invalid adminPass")
-            return exc.HTTPBadRequest(explanation=msg)
+            raise exc.HTTPBadRequest(explanation=msg)
         self.compute_api.set_admin_password(context, id, password)
         return webob.Response(status_int=202)
 
@@ -803,24 +804,6 @@ class Controller(object):
             msg = _("Unable to parse metadata key/value pairs.")
             LOG.debug(msg)
             raise exc.HTTPBadRequest(explanation=msg)
-
-    def _decode_personalities(self, personalities):
-        """Decode the Base64-encoded personalities."""
-        for personality in personalities:
-            try:
-                path = personality["path"]
-                contents = personality["contents"]
-            except (KeyError, TypeError):
-                msg = _("Unable to parse personality path/contents.")
-                LOG.info(msg)
-                raise exc.HTTPBadRequest(explanation=msg)
-
-            try:
-                personality["contents"] = base64.b64decode(contents)
-            except TypeError:
-                msg = _("Personality content could not be Base64 decoded.")
-                LOG.info(msg)
-                raise exc.HTTPBadRequest(explanation=msg)
 
     def _action_resize(self, input_dict, req, id):
         """ Resizes a given instance to the flavor size requested """
@@ -845,13 +828,16 @@ class Controller(object):
             LOG.debug(msg)
             raise exc.HTTPBadRequest(explanation=msg)
 
-        personalities = info["rebuild"].get("personality", [])
+        personality = info["rebuild"].get("personality", [])
+        injected_files = []
+        if personality:
+            injected_files = self._get_injected_files(personality)
+
         metadata = info["rebuild"].get("metadata")
         name = info["rebuild"].get("name")
 
         if metadata:
             self._validate_metadata(metadata)
-        self._decode_personalities(personalities)
 
         if 'rebuild' in info and 'adminPass' in info['rebuild']:
             password = info['rebuild']['adminPass']
@@ -861,7 +847,7 @@ class Controller(object):
         try:
             self.compute_api.rebuild(context, instance_id, image_href,
                                      password, name=name, metadata=metadata,
-                                     files_to_inject=personalities)
+                                     files_to_inject=injected_files)
         except exception.RebuildRequiresActiveInstance:
             msg = _("Instance %s must be active to rebuild.") % instance_id
             raise exc.HTTPConflict(explanation=msg)

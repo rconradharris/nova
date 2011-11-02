@@ -21,8 +21,6 @@
 Scheduler base class that all Schedulers should inherit from
 """
 
-import datetime
-
 from nova import db
 from nova import exception
 from nova import flags
@@ -143,8 +141,8 @@ class Scheduler(object):
         """Check whether a service is up based on last heartbeat."""
         last_heartbeat = service['updated_at'] or service['created_at']
         # Timestamps in DB are UTC.
-        elapsed = utils.utcnow() - last_heartbeat
-        return elapsed < datetime.timedelta(seconds=FLAGS.service_down_time)
+        elapsed = utils.total_seconds(utils.utcnow() - last_heartbeat)
+        return abs(elapsed) <= FLAGS.service_down_time
 
     def hosts_up(self, context, topic):
         """Return the list of hosts that have a running service for topic."""
@@ -157,6 +155,9 @@ class Scheduler(object):
     def create_instance_db_entry(self, context, request_spec):
         """Create instance DB entry based on request_spec"""
         base_options = request_spec['instance_properties']
+        if base_options.get('id'):
+            # Instance was already created before calling scheduler
+            return db.instance_get(context, base_options['id'])
         image = request_spec['image']
         instance_type = request_spec.get('instance_type')
         security_group = request_spec.get('security_group', 'default')
@@ -384,7 +385,8 @@ class Scheduler(object):
         if avail <= mem_inst:
             instance_id = ec2utils.id_to_ec2_id(instance_ref['id'])
             reason = _("Unable to migrate %(instance_id)s to %(dest)s: "
-                       "Lack of disk(host:%(avail)s <= instance:%(mem_inst)s)")
+                       "Lack of memory(host:%(avail)s <= "
+                       "instance:%(mem_inst)s)")
             raise exception.MigrationError(reason=reason % locals())
 
     def assert_compute_node_has_enough_disk(self, context,

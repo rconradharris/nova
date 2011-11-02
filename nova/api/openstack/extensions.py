@@ -34,7 +34,6 @@ from nova import utils
 from nova import wsgi as base_wsgi
 import nova.api.openstack
 from nova.api.openstack import common
-from nova.api.openstack import faults
 from nova.api.openstack import wsgi
 from nova.api.openstack import xmlutil
 
@@ -209,15 +208,15 @@ class ExtensionsResource(wsgi.Resource):
             # NOTE(dprince): the extensions alias is used as the 'id' for show
             ext = self.extension_manager.extensions[id]
         except KeyError:
-            return faults.Fault(webob.exc.HTTPNotFound())
+            raise webob.exc.HTTPNotFound()
 
         return dict(extension=self._translate(ext))
 
     def delete(self, req, id):
-        raise faults.Fault(webob.exc.HTTPNotFound())
+        raise webob.exc.HTTPNotFound()
 
     def create(self, req):
-        raise faults.Fault(webob.exc.HTTPNotFound())
+        raise webob.exc.HTTPNotFound()
 
 
 class ExtensionMiddleware(base_wsgi.Middleware):
@@ -536,7 +535,7 @@ def admin_only(fnc):
     def _wrapped(self, *args, **kwargs):
         if FLAGS.allow_admin_api:
             return fnc(self, *args, **kwargs)
-        return faults.Fault(webob.exc.HTTPNotFound())
+        raise webob.exc.HTTPNotFound()
     _wrapped.func_name = fnc.func_name
     return _wrapped
 
@@ -547,5 +546,5 @@ def wrap_errors(fn):
         try:
             return fn(*args)
         except Exception, e:
-            return faults.Fault(webob.exc.HTTPInternalServerError())
+            raise webob.exc.HTTPInternalServerError()
     return wrapped

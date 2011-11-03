@@ -41,6 +41,7 @@ from nova import utils
 from nova.compute import api as compute
 from nova.compute import power_state
 from nova.virt import driver
+from nova.virt.xenapi.volume_utils import VolumeHelper
 from nova.virt.xenapi.network_utils import NetworkHelper
 from nova.virt.xenapi.vm_utils import VMHelper
 from nova.virt.xenapi.vm_utils import ImageType
@@ -328,7 +329,7 @@ class VMOps(object):
             first_vdi_ref = VMHelper.fetch_blank_disk(session=self._session,
                         instance_type_id=instance.instance_type_id)
 
-            VMHelper.create_vbd(session=self._session, vm_ref=vm_ref,
+            VolumeHelper.create_vbd(session=self._session, vm_ref=vm_ref,
                 vdi_ref=first_vdi_ref, userdevice=userdevice, bootable=False)
 
             # device 1 reserved for rescue disk and we've used '0'
@@ -346,8 +347,9 @@ class VMOps(object):
                 VMHelper.auto_configure_disk(session=self._session,
                                              vdi_ref=first_vdi_ref)
 
-            VMHelper.create_vbd(session=self._session, vm_ref=vm_ref,
-                vdi_ref=first_vdi_ref, userdevice=userdevice, bootable=True)
+            VolumeHelper.create_vbd(session=self._session, vm_ref=vm_ref,
+                                    vdi_ref=first_vdi_ref,
+                                    userdevice=userdevice, bootable=True)
 
             # set user device to next free value
             # userdevice 1 is reserved for rescue and we've used '0'
@@ -369,7 +371,7 @@ class VMOps(object):
                 continue
             vdi_ref = self._session.call_xenapi('VDI.get_by_uuid',
                     vdi['vdi_uuid'])
-            VMHelper.create_vbd(session=self._session, vm_ref=vm_ref,
+            VolumeHelper.create_vbd(session=self._session, vm_ref=vm_ref,
                     vdi_ref=vdi_ref, userdevice=userdevice,
                     bootable=False)
             userdevice += 1
@@ -611,9 +613,15 @@ class VMOps(object):
                   'instance_id': instance_id,
                   'sr_path': sr_path}
 
-        task = self._session.async_call_plugin('migration', 'transfer_vhd',
-                {'params': pickle.dumps(params)})
-        self._session.wait_for_task(task, instance_id)
+        try:
+            _params = {'params': pickle.dumps(params)}
+            task = self._session.async_call_plugin('migration',
+                                                   'transfer_vhd',
+                                                   _params)
+            self._session.wait_for_task(task, instance_id)
+        except self.XenAPI.Failure:
+            msg = _("Failed to transfer vhd to new host")
+            raise exception.MigrationError(reason=msg)
 
     def _get_orig_vm_name_label(self, instance):
         return instance.name + '-orig'
@@ -909,8 +917,8 @@ class VMOps(object):
         vbd_ref = self._session.call_xenapi("VM.get_VBDs", vm_ref)[1]
         vdi_ref = self._session.call_xenapi("VBD.get_record", vbd_ref)["VDI"]
 
-        return VMHelper.create_vbd(self._session, rescue_vm_ref, vdi_ref, 1,
-                False)
+        return VolumeHelper.create_vbd(self._session, rescue_vm_ref, vdi_ref,
+                1, False)
 
     def _shutdown_rescue(self, rescue_vm_ref):
         """Shutdown a rescue instance."""

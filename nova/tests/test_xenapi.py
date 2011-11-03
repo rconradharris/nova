@@ -134,21 +134,6 @@ class XenAPIVolumeTestCase(test.TestCase):
             }
         }
 
-    def test_create_iscsi_storage(self):
-        """This shows how to test helper classes' methods."""
-        stubs.stubout_session(self.stubs, stubs.FakeSessionForVolumeTests)
-        session = xenapi_conn.XenAPISession('test_url', 'root', 'test_pass')
-        helper = volume_utils.VolumeHelper
-        helper.XenAPI = session.get_imported_xenapi()
-        vol = self._create_volume()
-        info = helper.parse_volume_info(self._make_info(), '/dev/sdc')
-        label = 'SR-%s' % vol['id']
-        description = 'Test-SR'
-        sr_ref = helper.create_iscsi_storage(session, info, label, description)
-        srs = xenapi_fake.get_all('SR')
-        self.assertEqual(sr_ref, srs[0])
-        db.volume_destroy(context.get_admin_context(), vol['id'])
-
     def test_parse_volume_info_raise_exception(self):
         """This shows how to test helper classes' methods."""
         stubs.stubout_session(self.stubs, stubs.FakeSessionForVolumeTests)
@@ -806,6 +791,19 @@ class XenAPIMigrateInstance(test.TestCase):
         conn = xenapi_conn.get_connection(False)
         conn.migrate_disk_and_power_off(self.context, instance, '127.0.0.1')
 
+    def test_migrate_disk_and_power_off_passes_exceptions(self):
+        instance = db.instance_create(self.context, self.instance_values)
+        stubs.stubout_session(self.stubs, stubs.FakeSessionForMigrationTests)
+
+        def fake_raise(*args, **kwargs):
+            raise exception.MigrationError(reason='test failure')
+        self.stubs.Set(vmops.VMOps, "_migrate_vhd", fake_raise)
+
+        conn = xenapi_conn.get_connection(False)
+        self.assertRaises(exception.MigrationError,
+                          conn.migrate_disk_and_power_off,
+                          self.context, instance, '127.0.0.1')
+
     def test_revert_migrate(self):
         instance = db.instance_create(self.context, self.instance_values)
         self.called = False
@@ -1132,7 +1130,9 @@ class XenAPIAutoDiskConfigTestCase(test.TestCase):
                 bootable=True):
             pass
 
-        self.stubs.Set(vm_utils.VMHelper, "create_vbd", fake_create_vbd)
+        self.stubs.Set(volume_utils.VolumeHelper,
+                       "create_vbd",
+                       fake_create_vbd)
 
     def assertIsPartitionCalled(self, called):
         marker = {"partition_called": False}

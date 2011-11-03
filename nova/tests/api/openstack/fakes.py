@@ -516,6 +516,8 @@ def stub_instance(id, user_id='fake', project_id='fake', host=None,
         "access_ip_v6": access_ipv6,
         "uuid": uuid,
         "progress": progress,
-        "auto_disk_config": auto_disk_config}
+        "auto_disk_config": auto_disk_config,
+        "name": "instance-%s" % id}
 
+    instance['fixed_ips'] = []
     return instance

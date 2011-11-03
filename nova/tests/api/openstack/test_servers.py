@@ -51,7 +51,7 @@ from nova import utils
 
 FLAGS = flags.FLAGS
 FAKE_UUID = fakes.FAKE_UUID
-FAKE_UUIDS = {0: FAKE_UUIDS}
+FAKE_UUIDS = {0: FAKE_UUID}
 NS = "{http://docs.openstack.org/compute/api/v1.1}"
 ATOMNS = "{http://www.w3.org/2005/Atom}"
 XPATH_NS = {

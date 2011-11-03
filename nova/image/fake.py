@@ -113,7 +113,8 @@ class _FakeImageService(object):
                  'properties': {'kernel_id': FLAGS.null_kernel,
                                 'ramdisk_id': FLAGS.null_kernel}}
 
-        image6 = {'id': '6',
+        # NOTE(sirp): was image '6'
+        image6 = {'id': 'a440c04b-79fa-479c-bed1-0b816eaec379',
                  'name': 'fakeimage6',
                  'created_at': timestamp,
                  'updated_at': timestamp,
@@ -128,7 +129,8 @@ class _FakeImageService(object):
                                 'architecture': 'x86_64',
                                 'auto_disk_config': 'False'}}
 
-        image7 = {'id': '7',
+        # NOTE(sirp): was image '7'
+        image7 = {'id': '70a599e0-31e7-49b7-b260-868f441e862b',
                  'name': 'fakeimage7',
                  'created_at': timestamp,
                  'updated_at': timestamp,

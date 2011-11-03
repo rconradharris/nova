@@ -61,6 +61,7 @@ class DiskConfigTestCase(test.TestCase):
                     return instance
 
         self.stubs.Set(nova.db.api, 'instance_get', fake_instance_get)
+        self.stubs.Set(nova.db, 'instance_get', fake_instance_get)
 
         def fake_instance_get_by_uuid(context, uuid):
             for instance in FAKE_INSTANCES:
@@ -77,33 +78,40 @@ class DiskConfigTestCase(test.TestCase):
         self.stubs.Set(nova.db.api, 'instance_get_all_by_filters',
                        fake_instance_get_all)
 
-        def instance_create(context, inst):
+        def fake_instance_create(context, inst_, session=None):
+            class FakeModel(dict):
+                def save(self, session=None):
+                    pass
+
+            inst = FakeModel(**inst_)
             inst['id'] = 1
             inst['uuid'] = AUTO_INSTANCE_UUID
             inst['created_at'] = datetime.datetime(2010, 10, 10, 12, 0, 0)
             inst['updated_at'] = datetime.datetime(2010, 10, 10, 12, 0, 0)
             inst['progress'] = 0
+            inst['name'] = 'instance-1'  # this is a property
 
-            def fake_instance_get_for_create(context, id_):
+            def fake_instance_get_for_create(context, id_, session=None):
                 return inst
 
+            self.stubs.Set(nova.db, 'instance_get',
+                          fake_instance_get_for_create)
             self.stubs.Set(nova.db.api, 'instance_get',
                           fake_instance_get_for_create)
+            self.stubs.Set(nova.db.sqlalchemy.api, 'instance_get',
+                          fake_instance_get_for_create)
+
+            def fake_instance_add_security_group(context, instance_id,
+                                                 security_group_id):
+                pass
+
+            self.stubs.Set(nova.db.sqlalchemy.api,
+                           'instance_add_security_group',
+                           fake_instance_add_security_group)
+
             return inst
 
-        def rpc_call_wrapper(context, topic, msg):
-            """Stub out the scheduler creating the instance entry"""
-            if topic == FLAGS.scheduler_topic and \
-                    msg['method'] == 'run_instance':
-                request_spec = msg['args']['request_spec']
-                num_instances = request_spec.get('num_instances', 1)
-                instances = []
-                for x in xrange(num_instances):
-                    instances.append(instance_create(context,
-                        request_spec['instance_properties']))
-                return instances
-
-        self.stubs.Set(nova.rpc, 'call', rpc_call_wrapper)
+        self.stubs.Set(nova.db, 'instance_create', fake_instance_create)
 
         app = openstack.APIRouter()
         app = extensions.ExtensionMiddleware(app)
@@ -137,12 +145,14 @@ class DiskConfigTestCase(test.TestCase):
             self.assertDiskConfig(server_dict, expected)
 
     def test_show_image(self):
-        req = fakes.HTTPRequest.blank('/fake/images/6')
+        req = fakes.HTTPRequest.blank(
+            '/fake/images/a440c04b-79fa-479c-bed1-0b816eaec379')
         res = req.get_response(self.app)
         image_dict = utils.loads(res.body)['image']
         self.assertDiskConfig(image_dict, 'MANUAL')
 
-        req = fakes.HTTPRequest.blank('/fake/images/7')
+        req = fakes.HTTPRequest.blank(
+            '/fake/images/70a599e0-31e7-49b7-b260-868f441e862b')
         res = req.get_response(self.app)
         image_dict = utils.loads(res.body)['image']
         self.assertDiskConfig(image_dict, 'AUTO')
@@ -165,7 +175,7 @@ class DiskConfigTestCase(test.TestCase):
         req.content_type = 'application/json'
         body = {'server': {
                   'name': 'server_test',
-                  'imageRef': '1',
+                  'imageRef': 'cedef40a-ed67-4d10-800e-17455edce175',
                   'flavorRef': '1',
                   'RAX-DCF:diskConfig': 'AUTO'
                }}
@@ -181,7 +191,7 @@ class DiskConfigTestCase(test.TestCase):
         req.content_type = 'application/json'
         body = {'server': {
                   'name': 'server_test',
-                  'imageRef': '1',
+                  'imageRef': 'cedef40a-ed67-4d10-800e-17455edce175',
                   'flavorRef': '1',
                   'RAX-DCF:diskConfig': 'MANUAL'
                }}
@@ -200,7 +210,7 @@ class DiskConfigTestCase(test.TestCase):
         req.content_type = 'application/json'
         body = {'server': {
                   'name': 'server_test',
-                  'imageRef': '6',
+                  'imageRef': 'a440c04b-79fa-479c-bed1-0b816eaec379',
                   'flavorRef': '1',
                }}
 
@@ -214,7 +224,7 @@ class DiskConfigTestCase(test.TestCase):
         req.content_type = 'application/json'
         body = {'server': {
                   'name': 'server_test',
-                  'imageRef': '7',
+                  'imageRef': '70a599e0-31e7-49b7-b260-868f441e862b',
                   'flavorRef': '1',
                }}
 

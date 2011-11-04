@@ -232,3 +232,17 @@ class DiskConfigTestCase(test.TestCase):
         res = req.get_response(self.app)
         server_dict = utils.loads(res.body)['server']
         self.assertDiskConfig(server_dict, 'AUTO')
+
+    def test_update_server_invalid_disk_config(self):
+        """Return BadRequest if user passes an invalid diskConfig value."""
+        req = fakes.HTTPRequest.blank(
+            '/fake/servers/%s' % MANUAL_INSTANCE_UUID)
+        req.method = 'PUT'
+        req.content_type = 'application/json'
+        body = {'server': {'RAX-DCF:diskConfig': 'server_test'}}
+        req.body = utils.dumps(body)
+        res = req.get_response(self.app)
+        self.assertEqual(res.status_int, 400)
+        expected_msg = '{"badRequest": {"message": "RAX-DCF:diskConfig must'\
+                       ' be either \'MANUAL\' or \'AUTO\'.", "code": 400}}'
+        self.assertEqual(res.body, expected_msg)

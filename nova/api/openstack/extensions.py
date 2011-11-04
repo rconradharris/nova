@@ -310,7 +310,8 @@ class ExtensionMiddleware(base_wsgi.Middleware):
         for request_ext in ext_mgr.get_request_extensions():
             LOG.debug(_('Extended request: %s'), request_ext.key)
             controller = req_controllers[request_ext.key]
-            controller.add_handler(request_ext.handler)
+            if request_ext.handler:
+                controller.add_handler(request_ext.handler)
             if request_ext.pre_handler:
                 controller.add_pre_handler(request_ext.pre_handler)
 
@@ -455,7 +456,7 @@ class RequestExtension(object):
     that is sent to core nova OpenStack API controllers.
 
     """
-    def __init__(self, method, url_route, handler, pre_handler=None):
+    def __init__(self, method, url_route, handler=None, pre_handler=None):
         self.url_route = url_route
         self.handler = handler
         self.conditions = dict(method=[method])

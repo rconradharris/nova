@@ -13,6 +13,10 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License
+
+"""Disk Config extension."""
+
+from webob import exc
 from xml.dom import minidom
 
 from nova.api.openstack import extensions
@@ -63,7 +67,13 @@ def disk_config_to_api(value):
 
 
 def disk_config_from_api(value):
-    return value == 'AUTO'
+    if value == 'AUTO':
+        return True
+    elif value == 'MANUAL':
+        return False
+    else:
+        msg = _("RAX-DCF:diskConfig must be either 'MANUAL' or 'AUTO'.")
+        raise exc.HTTPBadRequest(explanation=msg)
 
 
 class Disk_config(extensions.ExtensionDescriptor):
@@ -157,6 +167,9 @@ class Disk_config(extensions.ExtensionDescriptor):
                 server[self.INTERNAL_DISK_CONFIG] = value
                 req.body = utils.dumps(body)
 
+    def _pre_PUT_servers(self, req):
+        return self._pre_POST_servers(req)
+
     def get_request_extensions(self):
         ReqExt = extensions.RequestExtension
         return [
@@ -167,6 +180,9 @@ class Disk_config(extensions.ExtensionDescriptor):
                    url_route='/:(project_id)/servers',
                    handler=self._POST_servers,
                    pre_handler=self._pre_POST_servers),
+            ReqExt(method='PUT',
+                   url_route='/:(project_id)/servers/:(id)',
+                   pre_handler=self._pre_PUT_servers),
             ReqExt(method='GET',
                    url_route='/:(project_id)/images/:(id)',
                    handler=self._GET_images)

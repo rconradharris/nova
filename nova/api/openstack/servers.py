@@ -538,6 +538,11 @@ class Controller(object):
             access_ipv6 = body['server']['accessIPv6']
             update_dict['access_ip_v6'] = access_ipv6.strip()
 
+        if 'auto_disk_config' in body['server']:
+            auto_disk_config = utils.bool_from_str(
+                    body['server']['auto_disk_config'])
+            update_dict['auto_disk_config'] = auto_disk_config
+
         try:
             self.compute_api.update(ctxt, id, **update_dict)
         except exception.NotFound:

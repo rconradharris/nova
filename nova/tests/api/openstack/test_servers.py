@@ -50,8 +50,8 @@ from nova import utils
 
 
 FLAGS = flags.FLAGS
-FAKE_UUIDS = {0: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'}
-FAKE_UUID = FAKE_UUIDS[0]
+FAKE_UUID = fakes.FAKE_UUID
+FAKE_UUIDS = {0: FAKE_UUID}
 NS = "{http://docs.openstack.org/compute/api/v1.1}"
 ATOMNS = "{http://www.w3.org/2005/Atom}"
 XPATH_NS = {
@@ -71,36 +71,36 @@ def fake_gen_uuid():
 
 
 def return_server_by_id(context, id):
-    return stub_instance(id)
+    return fakes.stub_instance(id)
 
 
 def return_server_by_uuid(context, uuid):
     id = 1
-    return stub_instance(id, uuid=uuid)
+    return fakes.stub_instance(id, uuid=uuid)
 
 
 def return_server_with_attributes(**kwargs):
     def _return_server(context, instance_id):
-        return stub_instance(instance_id, **kwargs)
+        return fakes.stub_instance(instance_id, **kwargs)
     return _return_server
 
 
 def return_server_with_attributes_by_uuid(**kwargs):
     def _return_server(context, uuid):
-        return stub_instance(1, uuid=uuid, **kwargs)
+        return fakes.stub_instance(1, uuid=uuid, **kwargs)
     return _return_server
 
 
 def return_server_with_state(vm_state, task_state=None):
     def _return_server(context, uuid):
-        return stub_instance(1, uuid=uuid, vm_state=vm_state,
+        return fakes.stub_instance(1, uuid=uuid, vm_state=vm_state,
                              task_state=task_state)
     return _return_server
 
 
 def return_server_with_uuid_and_state(vm_state, task_state):
     def _return_server(context, id):
-        return stub_instance(id,
+        return fakes.stub_instance(id,
                              uuid=FAKE_UUID,
                              vm_state=vm_state,
                              task_state=task_state)
@@ -110,13 +110,13 @@ def return_server_with_uuid_and_state(vm_state, task_state):
 def return_servers(context, *args, **kwargs):
     servers = []
     for i in xrange(5):
-        server = stub_instance(i, 'fake', 'fake', uuid=get_fake_uuid(i))
+        server = fakes.stub_instance(i, 'fake', 'fake', uuid=get_fake_uuid(i))
         servers.append(server)
     return servers
 
 
 def return_servers_by_reservation(context, reservation_id=""):
-    return [stub_instance(i, reservation_id) for i in xrange(5)]
+    return [fakes.stub_instance(i, reservation_id) for i in xrange(5)]
 
 
 def return_servers_by_reservation_empty(context, reservation_id=""):
@@ -136,7 +136,8 @@ def return_servers_from_child_zones(*args, **kwargs):
         servers = []
         for server_id in xrange(5):
             server = Server()
-            server._info = stub_instance(server_id, reservation_id="child")
+            server._info = fakes.stub_instance(
+                    server_id, reservation_id="child")
             servers.append(server)
 
         zones.append(("Zone%d" % zone, servers))
@@ -148,7 +149,7 @@ def return_security_group(context, instance_id, security_group_id):
 
 
 def instance_update(context, instance_id, values):
-    return stub_instance(instance_id, name=values.get('display_name'))
+    return fakes.stub_instance(instance_id, name=values.get('display_name'))
 
 
 def instance_addresses(context, instance_id):
@@ -184,77 +185,6 @@ def create_fixed_ips(project_id, publics, privates, publics_are_floating):
                     virtual_interface=public_vif, floating_ips=[])
             fixed_ips.append(entry)
     return fixed_ips
-
-
-def stub_instance(id, user_id='fake', project_id='fake', host=None,
-                  vm_state=None, task_state=None,
-                  reservation_id="", uuid=FAKE_UUID, image_ref="10",
-                  flavor_id="1", name=None, key_name='',
-                  access_ipv4=None, access_ipv6=None, progress=0,
-                  public_ips=None, private_ips=None,
-                  public_ips_are_floating=False):
-
-    metadata = []
-    metadata.append(InstanceMetadata(key='seq', value=id))
-
-    inst_type = instance_types.get_instance_type_by_flavor_id(int(flavor_id))
-
-    if host is not None:
-        host = str(host)
-
-    if key_name:
-        key_data = 'FAKE'
-    else:
-        key_data = ''
-
-    fixed_ips = create_fixed_ips(project_id, public_ips, private_ips,
-            public_ips_are_floating)
-
-    # ReservationID isn't sent back, hack it in there.
-    server_name = name or "server%s" % id
-    if reservation_id != "":
-        server_name = "reservation_%s" % (reservation_id, )
-
-    instance = {
-        "name": str(id),
-        "id": int(id),
-        "created_at": datetime.datetime(2010, 10, 10, 12, 0, 0),
-        "updated_at": datetime.datetime(2010, 11, 11, 11, 0, 0),
-        "admin_pass": "",
-        "user_id": user_id,
-        "project_id": project_id,
-        "image_ref": image_ref,
-        "kernel_id": "",
-        "ramdisk_id": "",
-        "launch_index": 0,
-        "key_name": key_name,
-        "key_data": key_data,
-        "vm_state": vm_state or vm_states.BUILDING,
-        "task_state": task_state,
-        "memory_mb": 0,
-        "vcpus": 0,
-        "local_gb": 0,
-        "hostname": "",
-        "host": host,
-        "instance_type": dict(inst_type),
-        "user_data": "",
-        "reservation_id": reservation_id,
-        "mac_address": "",
-        "scheduled_at": utils.utcnow(),
-        "launched_at": utils.utcnow(),
-        "terminated_at": utils.utcnow(),
-        "availability_zone": "",
-        "display_name": server_name,
-        "display_description": "",
-        "locked": False,
-        "metadata": metadata,
-        "access_ip_v4": access_ipv4,
-        "access_ip_v6": access_ipv6,
-        "uuid": uuid,
-        "progress": progress,
-        "fixed_ips": fixed_ips}
-
-    return instance
 
 
 def fake_compute_api(cls, req, id):
@@ -845,7 +775,7 @@ class ServersControllerTest(test.TestCase):
         server_uuid = str(utils.gen_uuid())
 
         def fake_get_all(compute_self, context, search_opts=None):
-            return [stub_instance(100, uuid=server_uuid)]
+            return [fakes.stub_instance(100, uuid=server_uuid)]
 
         self.stubs.Set(nova.compute.API, 'get_all', fake_get_all)
 
@@ -862,7 +792,7 @@ class ServersControllerTest(test.TestCase):
             self.assertNotEqual(search_opts, None)
             self.assertTrue('image' in search_opts)
             self.assertEqual(search_opts['image'], '12345')
-            return [stub_instance(100, uuid=server_uuid)]
+            return [fakes.stub_instance(100, uuid=server_uuid)]
 
         self.stubs.Set(nova.compute.API, 'get_all', fake_get_all)
         self.flags(allow_admin_api=False)
@@ -878,7 +808,7 @@ class ServersControllerTest(test.TestCase):
             self.assertNotEqual(filters, None)
             self.assertEqual(filters['project_id'], 'fake')
             self.assertFalse(filters.get('tenant_id'))
-            return [stub_instance(100)]
+            return [fakes.stub_instance(100)]
 
         self.stubs.Set(nova.db, 'instance_get_all_by_filters',
                        fake_get_all)
@@ -898,7 +828,7 @@ class ServersControllerTest(test.TestCase):
             self.assertTrue('flavor' in search_opts)
             # flavor is an integer ID
             self.assertEqual(search_opts['flavor'], '12345')
-            return [stub_instance(100, uuid=server_uuid)]
+            return [fakes.stub_instance(100, uuid=server_uuid)]
 
         self.stubs.Set(nova.compute.API, 'get_all', fake_get_all)
         self.flags(allow_admin_api=False)
@@ -916,7 +846,7 @@ class ServersControllerTest(test.TestCase):
             self.assertNotEqual(search_opts, None)
             self.assertTrue('vm_state' in search_opts)
             self.assertEqual(search_opts['vm_state'], vm_states.ACTIVE)
-            return [stub_instance(100, uuid=server_uuid)]
+            return [fakes.stub_instance(100, uuid=server_uuid)]
 
         self.stubs.Set(nova.compute.API, 'get_all', fake_get_all)
         self.flags(allow_admin_api=False)
@@ -940,7 +870,7 @@ class ServersControllerTest(test.TestCase):
             self.assertNotEqual(search_opts, None)
             self.assertTrue('name' in search_opts)
             self.assertEqual(search_opts['name'], 'whee.*')
-            return [stub_instance(100, uuid=server_uuid)]
+            return [fakes.stub_instance(100, uuid=server_uuid)]
 
         self.stubs.Set(nova.compute.API, 'get_all', fake_get_all)
         self.flags(allow_admin_api=False)
@@ -960,7 +890,7 @@ class ServersControllerTest(test.TestCase):
             changes_since = datetime.datetime(2011, 1, 24, 17, 8, 1)
             self.assertEqual(search_opts['changes-since'], changes_since)
             self.assertTrue('deleted' not in search_opts)
-            return [stub_instance(100, uuid=server_uuid)]
+            return [fakes.stub_instance(100, uuid=server_uuid)]
 
         self.stubs.Set(nova.compute.API, 'get_all', fake_get_all)
 
@@ -995,7 +925,7 @@ class ServersControllerTest(test.TestCase):
             # Allowed only by admins with admin API on
             self.assertFalse('ip' in search_opts)
             self.assertFalse('unknown_option' in search_opts)
-            return [stub_instance(100, uuid=server_uuid)]
+            return [fakes.stub_instance(100, uuid=server_uuid)]
 
         self.stubs.Set(nova.compute.API, 'get_all', fake_get_all)
 
@@ -1027,7 +957,7 @@ class ServersControllerTest(test.TestCase):
             # Allowed only by admins with admin API on
             self.assertFalse('ip' in search_opts)
             self.assertFalse('unknown_option' in search_opts)
-            return [stub_instance(100, uuid=server_uuid)]
+            return [fakes.stub_instance(100, uuid=server_uuid)]
 
         self.stubs.Set(nova.compute.API, 'get_all', fake_get_all)
 
@@ -1057,7 +987,7 @@ class ServersControllerTest(test.TestCase):
             # Allowed only by admins with admin API on
             self.assertTrue('ip' in search_opts)
             self.assertTrue('unknown_option' in search_opts)
-            return [stub_instance(100, uuid=server_uuid)]
+            return [fakes.stub_instance(100, uuid=server_uuid)]
 
         self.stubs.Set(nova.compute.API, 'get_all', fake_get_all)
 
@@ -1081,7 +1011,7 @@ class ServersControllerTest(test.TestCase):
             self.assertNotEqual(search_opts, None)
             self.assertTrue('ip' in search_opts)
             self.assertEqual(search_opts['ip'], '10\..*')
-            return [stub_instance(100, uuid=server_uuid)]
+            return [fakes.stub_instance(100, uuid=server_uuid)]
 
         self.stubs.Set(nova.compute.API, 'get_all', fake_get_all)
 
@@ -1104,7 +1034,7 @@ class ServersControllerTest(test.TestCase):
             self.assertNotEqual(search_opts, None)
             self.assertTrue('ip6' in search_opts)
             self.assertEqual(search_opts['ip6'], 'ffff.*')
-            return [stub_instance(100, uuid=server_uuid)]
+            return [fakes.stub_instance(100, uuid=server_uuid)]
 
         self.stubs.Set(nova.compute.API, 'get_all', fake_get_all)
 
@@ -1244,7 +1174,7 @@ class ServersControllerTest(test.TestCase):
         '''
 
         def return_servers_with_host(context, *args, **kwargs):
-            return [stub_instance(i, 'fake', 'fake', i % 2,
+            return [fakes.stub_instance(i, 'fake', 'fake', i % 2,
                                   uuid=get_fake_uuid(i))
                     for i in xrange(5)]
 

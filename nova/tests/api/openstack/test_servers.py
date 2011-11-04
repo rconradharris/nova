@@ -50,14 +50,17 @@ from nova import utils
 
 
 FLAGS = flags.FLAGS
-FAKE_UUIDS = {0: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'}
-FAKE_UUID = FAKE_UUIDS[0]
+FAKE_UUID = fakes.FAKE_UUID
+FAKE_UUIDS = {0: FAKE_UUID}
 NS = "{http://docs.openstack.org/compute/api/v1.1}"
 ATOMNS = "{http://www.w3.org/2005/Atom}"
 XPATH_NS = {
     'atom': 'http://www.w3.org/2005/Atom',
     'ns': 'http://docs.openstack.org/compute/api/v1.1'
 }
+
+
+stub_instance = fakes.stub_instance
 
 
 def get_fake_uuid(token=0):

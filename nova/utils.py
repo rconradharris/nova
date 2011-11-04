@@ -27,6 +27,7 @@ import json
 import lockfile
 import netaddr
 import os
+import pprint
 import random
 import re
 import shlex
@@ -1015,6 +1016,10 @@ def make_dev_path(dev, partition=None, base='/dev'):
     if partition:
         path += str(partition)
     return path
+
+
+def RAISE_THIS(this):
+    raise Exception(pprint.pformat(this))
 
 
 def total_seconds(td):

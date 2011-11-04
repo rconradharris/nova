@@ -74,6 +74,8 @@ class Disk_config(extensions.ExtensionDescriptor):
         self.compute_api = compute.API()
 
     def _GET_servers(self, req, res, body):
+        context = req.environ['nova.context']
+
         # If using XML, use serialization template
         template = res.environ.get('nova.template')
         if template:
@@ -82,8 +84,13 @@ class Disk_config(extensions.ExtensionDescriptor):
             else:
                 template.attach(ServerDiskConfigTemplate())
 
-        context = req.environ['nova.context']
-        servers = body['servers'] if 'servers' in body else [body['server']]
+        if 'servers' in body:
+            servers = body['servers']
+        elif 'server' in body:
+            servers = [body['server']]
+        else:
+            servers = []
+
         for server in servers:
             # TODO(sirp): it would be nice to eliminate this extra lookup
             db_server = self.compute_api.routing_get(context, server['id'])

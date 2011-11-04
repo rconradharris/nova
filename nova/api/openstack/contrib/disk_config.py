@@ -58,6 +58,14 @@ class ImagesDiskConfigTemplate(xmlutil.TemplateBuilder):
         return xmlutil.SlaveTemplate(root, 1, nsmap={ALIAS: XMLNS_DCF})
 
 
+def disk_config_to_api(value):
+    return 'AUTO' if value else 'MANUAL'
+
+
+def disk_config_from_api(value):
+    return value == 'AUTO'
+
+
 class Disk_config(extensions.ExtensionDescriptor):
     """Disk Management Extension"""
 
@@ -73,53 +81,52 @@ class Disk_config(extensions.ExtensionDescriptor):
         super(Disk_config, self).__init__(ext_mgr)
         self.compute_api = compute.API()
 
+    def _extract_resource_from_body(self, res, body,
+            singular, singular_template, plural, plural_template):
+        """Returns a list of the given resources from the request body.
+
+        The templates passed in are used for XML serialization.
+        """
+        template = res.environ.get('nova.template')
+        if plural in body:
+            resources = body[plural]
+            if template:
+                template.attach(plural_template)
+        elif singular in body:
+            resources = [body[singular]]
+            if template:
+                template.attach(singular_template)
+        else:
+            resources = []
+
+        return resources
+
     def _GET_servers(self, req, res, body):
         context = req.environ['nova.context']
 
-        # If using XML, use serialization template
-        template = res.environ.get('nova.template')
-        if template:
-            if 'servers' in body:
-                template.attach(ServersDiskConfigTemplate())
-            else:
-                template.attach(ServerDiskConfigTemplate())
-
-        if 'servers' in body:
-            servers = body['servers']
-        elif 'server' in body:
-            servers = [body['server']]
-        else:
-            servers = []
+        servers = self._extract_resource_from_body(res, body,
+            singular='server', singular_template=ServerDiskConfigTemplate(),
+            plural='servers', plural_template=ServersDiskConfigTemplate())
 
         for server in servers:
-            # TODO(sirp): it would be nice to eliminate this extra lookup
             db_server = self.compute_api.routing_get(context, server['id'])
-
             value = db_server[self.INTERNAL_DISK_CONFIG]
-            api_value = 'AUTO' if value else 'MANUAL'
-
-            server[self.API_DISK_CONFIG] = api_value
+            server[self.API_DISK_CONFIG] = disk_config_to_api(value)
 
         return res
 
     def _GET_images(self, req, res, body):
-        template = res.environ.get('nova.template')
-        if template:
-            if 'images' in body:
-                template.attach(ImagesDiskConfigTemplate())
-            else:
-                template.attach(ImageDiskConfigTemplate())
+        images = self._extract_resource_from_body(res, body,
+            singular='image', singular_template=ImageDiskConfigTemplate(),
+            plural='images', plural_template=ImagesDiskConfigTemplate())
 
-        images = body['images'] if 'images' in body else [body['image']]
         for image in images:
             metadata = image['metadata']
-            if self.INTERNAL_DISK_CONFIG in metadata:
 
+            if self.INTERNAL_DISK_CONFIG in metadata:
                 raw_value = metadata[self.INTERNAL_DISK_CONFIG]
                 value = utils.bool_from_str(raw_value)
-                api_value = 'AUTO' if value else 'MANUAL'
-
-                image[self.API_DISK_CONFIG] = api_value
+                image[self.API_DISK_CONFIG] = disk_config_to_api(value)
 
         return res
 
@@ -127,20 +134,18 @@ class Disk_config(extensions.ExtensionDescriptor):
         return self._GET_servers(req, res, body)
 
     def _pre_POST_servers(self, req):
-        # NOTE(sirp): in an ideal world, extensions shouldn't have to worry
-        # about serialization--that would be handled exclusively by
-        # middleware. Unfortunately, until we refactor extensions to better
-        # support pre-processing extensions (puttinng in place an
-        # EagerDeserialization middleware similar to our LazySerialization),
-        # we'll need to keep this hack in place.
-
+        # NOTE(sirp): deserialization currently occurs *after* pre-processing
+        # extensions are called. Until extensions are refactored so that
+        # deserialization occurs earlier, we have to perform the
+        # deserialization ourselves.
         content_type = req.content_type
+
         if 'xml' in content_type:
             node = minidom.parseString(req.body)
             server = node.getElementsByTagName('server')[0]
             api_value = server.getAttribute(self.API_DISK_CONFIG)
             if api_value:
-                value = api_value == 'AUTO'
+                value = disk_config_from_api(api_value)
                 server.setAttribute(self.INTERNAL_DISK_CONFIG, str(value))
                 req.body = str(node.toxml())
         else:
@@ -148,7 +153,7 @@ class Disk_config(extensions.ExtensionDescriptor):
             server = body['server']
             api_value = server.get(self.API_DISK_CONFIG)
             if api_value:
-                value = api_value == 'AUTO'
+                value = disk_config_from_api(api_value)
                 server[self.INTERNAL_DISK_CONFIG] = value
                 req.body = utils.dumps(body)
 

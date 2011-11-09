@@ -189,7 +189,8 @@ class VolumeHelper(HelperBase):
         return sr_ref
 
     @classmethod
-    def create_vbd(cls, session, vm_ref, vdi_ref, userdevice, bootable):
+    def create_vbd(cls, session, vm_ref, vdi_ref, userdevice, bootable,
+                   mode='RW', type_='disk'):
         """Create a VBD record.  Returns a Deferred that gives the new
         VBD reference."""
         vbd_rec = {}
@@ -197,18 +198,18 @@ class VolumeHelper(HelperBase):
         vbd_rec['VDI'] = vdi_ref
         vbd_rec['userdevice'] = str(userdevice)
         vbd_rec['bootable'] = bootable
-        vbd_rec['mode'] = 'RW'
-        vbd_rec['type'] = 'disk'
+        vbd_rec['mode'] = mode
+        vbd_rec['type'] = type_
         vbd_rec['unpluggable'] = True
         vbd_rec['empty'] = False
         vbd_rec['other_config'] = {}
         vbd_rec['qos_algorithm_type'] = ''
         vbd_rec['qos_algorithm_params'] = {}
         vbd_rec['qos_supported_algorithms'] = []
-        LOG.debug(_('Creating VBD for VM %(vm_ref)s,'
+        LOG.debug(_('Creating %(type)s VBD for VM %(vm_ref)s,'
                 ' VDI %(vdi_ref)s ... ') % locals())
         vbd_ref = session.call_xenapi('VBD.create', vbd_rec)
-        LOG.debug(_('Created VBD %(vbd_ref)s for VM %(vm_ref)s,'
+        LOG.debug(_('Created %(type_)s VBD %(vbd_ref)s for VM %(vm_ref)s,'
                 ' VDI %(vdi_ref)s.') % locals())
         return vbd_ref
 

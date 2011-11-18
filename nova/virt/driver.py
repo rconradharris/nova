@@ -490,6 +490,13 @@ class ComputeDriver(object):
         # TODO(Vek): Need to pass context in for access to auth_token
         pass
 
+    def poll_running_deleted_instances(self, timeout):
+        """Poll for any instances which are erroneously still running after
+        having been deleted, then log and them down.
+        """
+        # TODO(Vek): Need to pass context in for access to auth_token
+        raise NotImplementedError()
+
     def poll_rebooting_instances(self, timeout):
         """Poll for rebooting instances"""
         # TODO(Vek): Need to pass context in for access to auth_token

@@ -75,6 +75,10 @@ flags.DEFINE_string('console_host', socket.gethostname(),
 flags.DEFINE_integer('live_migration_retry_count', 30,
                      "Retry count needed in live_migration."
                      " sleep 1 sec for each count")
+flags.DEFINE_integer("running_deleted_instance_timeout", 0,
+                     "Automatically shutdown any instances which are"
+                     " still running N seconds after being deleted."
+                     " Set to 0 to disable.")
 flags.DEFINE_integer("reboot_timeout", 0,
                      "Automatically hard reboot an instance if it has been "
                      "stuck in a rebooting state longer than N seconds."
@@ -1809,6 +1813,15 @@ class ComputeManager(manager.SchedulerDependentManager):
             self._get_instance_volume_block_device_info(context, instance_id)
         self.driver.destroy(instance_ref, network_info,
                             block_device_info, True)
+
+    @manager.periodic_task
+    def _poll_running_deleted_instances(self, context):
+        """Poll for any instances which are erroneously still running after
+        having been deleted, then log and them down.
+        """
+        if FLAGS.running_deleted_instance_timeout > 0:
+            self.driver.poll_running_deleted_instances(
+                    FLAGS.running_deleted_instance_timeout)
 
     @manager.periodic_task
     def _poll_rebooting_instances(self, context):

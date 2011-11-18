@@ -604,6 +604,12 @@ def instance_get_project_vpn(context, project_id):
     return IMPL.instance_get_project_vpn(context, project_id)
 
 
+def instance_get_all_by_filters_and_updated_earlier_than(
+        context, ending_updated_at, session=None, **filters):
+    return IMPL.instance_get_all_by_filters_and_updated_earlier_than(
+            context, ending_updated_at, session=None, **filters)
+
+
 def instance_get_all_hung_in_rebooting(context, reboot_window, session=None):
     """Get all instances stuck in a rebooting state."""
     return IMPL.instance_get_all_hung_in_rebooting(context, reboot_window,

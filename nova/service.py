@@ -252,10 +252,10 @@ class Service(object):
             except Exception:
                 pass
 
-    def periodic_tasks(self):
+    def periodic_tasks(self, raise_on_error=False):
         """Tasks to be run at a periodic interval."""
         ctxt = context.get_admin_context()
-        self.manager.periodic_tasks(ctxt)
+        self.manager.periodic_tasks(ctxt, raise_on_error=raise_on_error)
 
     def report_state(self):
         """Update the state of this service in the datastore."""

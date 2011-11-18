@@ -1554,6 +1554,22 @@ def instance_get_floating_address(context, instance_id):
 
 
 @require_admin_context
+def instance_get_all_by_filters_and_updated_earlier_than(
+        context, ending_updated_at, session=None, **filters):
+
+    if not session:
+        session = get_session()
+
+    partial = session.query(models.Instance)\
+                      .filter(models.Instance.updated_at <= ending_updated_at)
+
+    for filter_key, filter_value in filters.items():
+        partial.filter_by(filter_key=filter_value)
+
+    return partial.all()
+
+
+@require_admin_context
 def instance_get_all_hung_in_rebooting(context, reboot_window, session=None):
     reboot_window = datetime.datetime.utcnow() - datetime.timedelta(
             seconds=reboot_window)

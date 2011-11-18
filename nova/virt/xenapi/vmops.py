@@ -20,6 +20,7 @@ Management class for VM-related functions (spawn, reboot, etc).
 """
 
 import base64
+import datetime
 import json
 import M2Crypto
 import os
@@ -98,28 +99,20 @@ class VMOps(object):
         """List VM instances."""
         # TODO(justinsb): Should we just always use the details method?
         #  Seems to be the same number of API calls..
-        vm_refs = []
-        for vm_ref in self._session.call_xenapi("VM.get_all"):
-            vm_rec = self._session.call_xenapi("VM.get_record", vm_ref)
-            if not vm_rec["is_a_template"] and not vm_rec["is_control_domain"]:
-                vm_refs.append(vm_rec["name_label"])
-        return vm_refs
+        for vm_ref, vm_rec in VMHelper.list_vms(self._session):
+            yield vm_rec["name_label"]
 
     def list_instances_detail(self):
         """List VM instances, returning InstanceInfo objects."""
-        instance_infos = []
-        for vm_ref in self._session.call_xenapi("VM.get_all"):
-            vm_rec = self._session.call_xenapi("VM.get_record", vm_ref)
-            if not vm_rec["is_a_template"] and not vm_rec["is_control_domain"]:
-                name = vm_rec["name_label"]
+        for vm_ref, vm_rec in VMHelper.list_vms(self._session):
+            name = vm_rec["name_label"]
 
-                # TODO(justinsb): This a roundabout way to map the state
-                openstack_format = VMHelper.compile_info(vm_rec)
-                state = openstack_format['state']
+            # TODO(justinsb): This a roundabout way to map the state
+            openstack_format = VMHelper.compile_info(vm_rec)
+            state = openstack_format['state']
 
-                instance_info = driver.InstanceInfo(name, state)
-                instance_infos.append(instance_info)
-        return instance_infos
+            instance_info = driver.InstanceInfo(name, state)
+            yield instance_info
 
     def confirm_migration(self, migration, instance, network_info):
         name_label = self._get_orig_vm_name_label(instance)
@@ -1163,6 +1156,40 @@ class VMOps(object):
 
             if utils.is_older_than(task_created, timeout):
                 self._session.call_xenapi("task.cancel", task_ref)
+
+    @utils.timefunc
+    def poll_running_deleted_instances(self, timeout):
+        """Poll for any instances which are erroneously still running after
+        having been deleted, then log and them down.
+        """
+        now = datetime.datetime.utcnow()
+        ending_updated_at = now - datetime.timedelta(seconds=timeout)
+
+        ctxt = nova_context.get_admin_context()
+        instances = db.instance_get_all_by_filters_and_updated_earlier_than(
+                ctxt, ending_updated_at)
+
+        for instance in instances:
+            try:
+                vm_ref = self._get_vm_opaque_ref(instance)
+            except exception.NotFound:
+                pass
+            else:
+                # NOTE(sirp): bump updated_at so we don't accidentally try to
+                # destroy VM multiple times (if timeout is configured too
+                # low).
+                db.instance_update(ctxt, instance.id, {"updated_at": now})
+
+                instance_id = instance.id
+                vm_rec = self._session.call_xenapi("VM.get_record", vm_ref)
+                vm_uuid = vm_rec["uuid"]
+
+                LOG.warning(_("Instance %(instance_id)s is marked 'deleted'"
+                              " but VM '%(vm_uuid)s' is still present."
+                              " Shutting down and destroying the VM."),
+                            locals())
+
+                self._destroy(instance, vm_ref)
 
     def poll_rebooting_instances(self, timeout):
         """Look for expirable rebooting instances.

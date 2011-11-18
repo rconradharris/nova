@@ -1163,40 +1163,6 @@ class VMOps(object):
             if utils.is_older_than(task_created, timeout):
                 self._session.call_xenapi("task.cancel", task_ref)
 
-    @utils.timefunc
-    def poll_running_deleted_instances(self, timeout):
-        """Poll for any instances which are erroneously still running after
-        having been deleted, then log and them down.
-        """
-        now = datetime.datetime.utcnow()
-        ending_updated_at = now - datetime.timedelta(seconds=timeout)
-
-        ctxt = nova_context.get_admin_context()
-        instances = db.instance_get_all_by_filters_and_updated_earlier_than(
-                ctxt, ending_updated_at)
-
-        for instance in instances:
-            try:
-                vm_ref = self._get_vm_opaque_ref(instance)
-            except exception.NotFound:
-                pass
-            else:
-                # NOTE(sirp): bump updated_at so we don't accidentally try to
-                # destroy VM multiple times (if timeout is configured too
-                # low).
-                db.instance_update(ctxt, instance.id, {"updated_at": now})
-
-                instance_id = instance.id
-                vm_rec = self._session.call_xenapi("VM.get_record", vm_ref)
-                vm_uuid = vm_rec["uuid"]
-
-                LOG.warning(_("Instance %(instance_id)s is marked 'deleted'"
-                              " but VM '%(vm_uuid)s' is still present."
-                              " Shutting down and destroying the VM."),
-                            locals())
-
-                self._destroy(instance, vm_ref)
-
     def poll_rebooting_instances(self, timeout):
         """Look for expirable rebooting instances.
 

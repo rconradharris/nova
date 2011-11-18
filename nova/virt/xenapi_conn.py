@@ -274,12 +274,6 @@ class XenAPIConnection(driver.ComputeDriver):
         """Power on the specified instance"""
         self._vmops.power_on(instance)
 
-    def poll_running_deleted_instances(self, timeout):
-        """Poll for any instances which are erroneously still running after
-        having been deleted, then log and them down.
-        """
-        self._vmops.poll_running_deleted_instances(timeout)
-
     def poll_rebooting_instances(self, timeout):
         """Poll for rebooting instances"""
         self._vmops.poll_rebooting_instances(timeout)

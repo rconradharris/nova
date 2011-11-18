@@ -485,10 +485,6 @@ class HyperVConnection(driver.ComputeDriver):
         if vm is None:
             raise exception.InstanceNotFound(instance_id=instance_name)
 
-    def poll_running_deleted_instances(self, timeout):
-        """See xenapi_conn.py implementation."""
-        pass
-
     def poll_rebooting_instances(self, timeout):
         """See xenapi_conn.py implementation."""
         pass

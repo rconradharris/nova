@@ -628,13 +628,6 @@ class LibvirtConnection(driver.ComputeDriver):
         self.reboot(instance, network_info, xml=unrescue_xml)
 
     @exception.wrap_exception()
-    def poll_running_deleted_instances(self, timeout):
-        """Poll for any instances which are erroneously still running after
-        having been deleted, then log and them down.
-        """
-        pass
-
-    @exception.wrap_exception()
     def poll_rebooting_instances(self, timeout):
         pass
 

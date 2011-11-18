@@ -52,6 +52,7 @@ tasksto a wrapping service.
 This module provides Manager, a base class for managers.
 
 """
+import traceback
 
 from nova import flags
 from nova import log as logging
@@ -66,16 +67,52 @@ FLAGS = flags.FLAGS
 LOG = logging.getLogger('nova.manager')
 
 
+def periodic_task(f):
+    """Decorator to indicate that a method is a periodic task."""
+    f._periodic_task = True
+    return f
+
+
+class ManagerMeta(type):
+    def __init__(cls, names, bases, dict_):
+        """Metaclass that allows us to collect decorated periodic tasks."""
+        super(ManagerMeta, cls).__init__(names, bases, dict_)
+
+        try:
+            cls._periodic_tasks = cls._periodic_tasks[:]
+        except AttributeError:
+            cls._periodic_tasks = []
+
+        for value in cls.__dict__.values():
+            if getattr(value, '_periodic_task', False):
+                cls._periodic_tasks.append(value)
+
+
 class Manager(base.Base):
+    __metaclass__ = ManagerMeta
+
     def __init__(self, host=None, db_driver=None):
         if not host:
             host = FLAGS.host
         self.host = host
         super(Manager, self).__init__(db_driver)
 
-    def periodic_tasks(self, context=None):
+    def periodic_tasks(self, context, raise_on_error=False):
         """Tasks to be run at a periodic interval."""
-        pass
+        for task in self._periodic_tasks:
+            task_name = '.'.join(
+                [self.__class__.__name__, task.__name__])
+
+            LOG.debug(_("Running periodic task %(task_name)s"), locals())
+
+            try:
+                task(self, context)
+            except Exception as e:
+                if raise_on_error:
+                    raise
+                e_tb = traceback.format_exc(e)
+                LOG.error(_("Error during %(task_name)s: %(e)s\n%(e_tb)s"),
+                          locals())
 
     def init_host(self):
         """Handle initialization if this is a standalone service.
@@ -105,11 +142,10 @@ class SchedulerDependentManager(Manager):
         """Remember these capabilities to send on next periodic update."""
         self.last_capabilities = capabilities
 
-    def periodic_tasks(self, context=None):
+    @periodic_task
+    def _publish_service_capabilities(self, context):
         """Pass data back to the scheduler at a periodic interval."""
         if self.last_capabilities:
             LOG.debug(_('Notifying Schedulers of capabilities ...'))
             api.update_service_capabilities(context, self.service_name,
                                 self.host, self.last_capabilities)
-
-        super(SchedulerDependentManager, self).periodic_tasks(context)

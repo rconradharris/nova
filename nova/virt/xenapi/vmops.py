@@ -99,11 +99,15 @@ class VMOps(object):
         """List VM instances."""
         # TODO(justinsb): Should we just always use the details method?
         #  Seems to be the same number of API calls..
+        name_labels = []
         for vm_ref, vm_rec in VMHelper.list_vms(self._session):
-            yield vm_rec["name_label"]
+            name_labels.append(vm_rec["name_label"])
+
+        return name_labels
 
     def list_instances_detail(self):
         """List VM instances, returning InstanceInfo objects."""
+        details = []
         for vm_ref, vm_rec in VMHelper.list_vms(self._session):
             name = vm_rec["name_label"]
 
@@ -112,7 +116,9 @@ class VMOps(object):
             state = openstack_format['state']
 
             instance_info = driver.InstanceInfo(name, state)
-            yield instance_info
+            details.append(instance_info)
+
+        return details
 
     def confirm_migration(self, migration, instance, network_info):
         name_label = self._get_orig_vm_name_label(instance)

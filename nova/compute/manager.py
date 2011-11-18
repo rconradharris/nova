@@ -1814,14 +1814,45 @@ class ComputeManager(manager.SchedulerDependentManager):
         self.driver.destroy(instance_ref, network_info,
                             block_device_info, True)
 
+    def _instances_on_host_older_than(self, context, host, seconds):
+        instances = self.db.instance_get_all_by_host(context, self.host)
+
+        for instance in instances:
+            if utils.is_older_than(instance.updated_at, seconds):
+                yield instance
+
+    def _bump_instance_updated_at(self, context, instance):
+            self.db.instance_update(context, instance.id,
+                                    {"updated_at": utils.utcnow()})
+
     @manager.periodic_task
     def _poll_running_deleted_instances(self, context):
         """Poll for any instances which are erroneously still running after
         having been deleted, then log and them down.
         """
-        if FLAGS.running_deleted_instance_timeout > 0:
-            self.driver.poll_running_deleted_instances(
+        if FLAGS.running_deleted_instance_timeout <= 0:
+            LOG.debug(_("FLAGS.running_deleted_instance_timeout <= 0, skipping..."))
+            return
+
+        present_name_labels = set(self.driver.list_instances())
+
+        # NOTE(sirp): admin contexts don't ordinarily return deleted records
+        with utils.temporary_mutation(context, read_deleted=True):
+            instances = self._instances_on_host_older_than(
+                    context, self.host,
                     FLAGS.running_deleted_instance_timeout)
+
+            for instance in instances:
+                instance_id = instance.id
+                name_label = instance.name
+
+                if instance.deleted and instance.name in present_name_labels:
+                    self._bump_instance_updated_at(context, instance)
+                    LOG.warning(_("Destroying instance %(instance_id)s with name"
+                                  " label '%(name_label)s' which is marked as"
+                                  " DELETED but still present on host."),
+                                locals())
+                    self._delete_instance(context, instance.id)
 
     @manager.periodic_task
     def _poll_rebooting_instances(self, context):

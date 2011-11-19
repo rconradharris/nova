@@ -1207,34 +1207,34 @@ class ComputeManager(manager.SchedulerDependentManager):
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock
-    def pause_instance(self, context, instance_id):
+    def pause_instance(self, context, instance_uuid):
         """Pause an instance on this host."""
-        LOG.audit(_('instance %s: pausing'), instance_id, context=context)
+        LOG.audit(_('instance %s: pausing'), instance_uuid, context=context)
         context = context.elevated()
 
-        instance_ref = self.db.instance_get(context, instance_id)
+        instance_ref = self.db.instance_get_by_uuid(context, instance_uuid)
         self.driver.pause(instance_ref)
 
         current_power_state = self._get_power_state(context, instance_ref)
         self._instance_update(context,
-                              instance_id,
+                              instance_ref['id'],
                               power_state=current_power_state,
                               vm_state=vm_states.PAUSED,
                               task_state=None)
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock
-    def unpause_instance(self, context, instance_id):
+    def unpause_instance(self, context, instance_uuid):
         """Unpause a paused instance on this host."""
-        LOG.audit(_('instance %s: unpausing'), instance_id, context=context)
+        LOG.audit(_('instance %s: unpausing'), instance_uuid, context=context)
         context = context.elevated()
 
-        instance_ref = self.db.instance_get(context, instance_id)
+        instance_ref = self.db.instance_get_by_uuid(context, instance_uuid)
         self.driver.unpause(instance_ref)
 
         current_power_state = self._get_power_state(context, instance_ref)
         self._instance_update(context,
-                              instance_id,
+                              instance_ref['id'],
                               power_state=current_power_state,
                               vm_state=vm_states.ACTIVE,
                               task_state=None)
@@ -1260,53 +1260,53 @@ class ComputeManager(manager.SchedulerDependentManager):
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock
-    def suspend_instance(self, context, instance_id):
+    def suspend_instance(self, context, instance_uuid):
         """Suspend the given instance."""
-        LOG.audit(_('instance %s: suspending'), instance_id, context=context)
+        LOG.audit(_('instance %s: suspending'), instance_uuid, context=context)
         context = context.elevated()
 
-        instance_ref = self.db.instance_get(context, instance_id)
+        instance_ref = self.db.instance_get_by_uuid(context, instance_uuid)
         self.driver.suspend(instance_ref)
 
         current_power_state = self._get_power_state(context, instance_ref)
         self._instance_update(context,
-                              instance_id,
+                              instance_ref['id'],
                               power_state=current_power_state,
                               vm_state=vm_states.SUSPENDED,
                               task_state=None)
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock
-    def resume_instance(self, context, instance_id):
+    def resume_instance(self, context, instance_uuid):
         """Resume the given suspended instance."""
-        LOG.audit(_('instance %s: resuming'), instance_id, context=context)
+        LOG.audit(_('instance %s: resuming'), instance_uuid, context=context)
         context = context.elevated()
 
-        instance_ref = self.db.instance_get(context, instance_id)
+        instance_ref = self.db.instance_get_by_uuid(context, instance_uuid)
         self.driver.resume(instance_ref)
 
         current_power_state = self._get_power_state(context, instance_ref)
         self._instance_update(context,
-                              instance_id,
+                              instance_ref['id'],
                               power_state=current_power_state,
                               vm_state=vm_states.ACTIVE,
                               task_state=None)
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
-    def lock_instance(self, context, instance_id):
+    def lock_instance(self, context, instance_uuid):
         """Lock the given instance."""
         context = context.elevated()
 
-        LOG.debug(_('instance %s: locking'), instance_id, context=context)
-        self.db.instance_update(context, instance_id, {'locked': True})
+        LOG.debug(_('instance %s: locking'), instance_uuid, context=context)
+        self.db.instance_update(context, instance_uuid, {'locked': True})
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
-    def unlock_instance(self, context, instance_id):
+    def unlock_instance(self, context, instance_uuid):
         """Unlock the given instance."""
         context = context.elevated()
 
-        LOG.debug(_('instance %s: unlocking'), instance_id, context=context)
-        self.db.instance_update(context, instance_id, {'locked': False})
+        LOG.debug(_('instance %s: unlocking'), instance_uuid, context=context)
+        self.db.instance_update(context, instance_uuid, {'locked': False})
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     def get_lock(self, context, instance_id):

@@ -1294,12 +1294,22 @@ class API(base.Base):
                     vm_state=vm_states.RESIZING,
                     task_state=task_states.RESIZE_PREP)
 
+        request_spec = {
+            'instance_type': new_instance_type,
+            'filter': None,
+            'num_instances': 1,
+            'original_host': instance['host'],
+            'avoid_original_host': not FLAGS.allow_resize_to_same_host,
+            'local_zone': True,
+            }
+
         self._cast_scheduler_message(context,
                     {"method": "prep_resize",
                      "args": {"topic": FLAGS.compute_topic,
                               "instance_id": instance['uuid'],
                               "update_db": False,
-                              "instance_type_id": new_instance_type['id']}})
+                              "instance_type_id": new_instance_type['id'],
+                              "request_spec": request_spec}})
 
     @scheduler_api.reroute_compute("add_fixed_ip")
     def add_fixed_ip(self, context, instance, network_id):
@@ -1337,21 +1347,23 @@ class API(base.Base):
     def pause(self, context, instance):
         """Pause the given instance."""
         instance_id = instance["id"]
+        instance_uuid = instance["uuid"]
         self.update(context,
                     instance_id,
                     vm_state=vm_states.ACTIVE,
                     task_state=task_states.PAUSING)
-        self._cast_compute_message('pause_instance', context, instance_id)
+        self._cast_compute_message('pause_instance', context, instance_uuid)
 
     @scheduler_api.reroute_compute("unpause")
     def unpause(self, context, instance):
         """Unpause the given instance."""
         instance_id = instance["id"]
+        instance_uuid = instance["uuid"]
         self.update(context,
                     instance_id,
                     vm_state=vm_states.PAUSED,
                     task_state=task_states.UNPAUSING)
-        self._cast_compute_message('unpause_instance', context, instance_id)
+        self._cast_compute_message('unpause_instance', context, instance_uuid)
 
     def _call_compute_message_for_host(self, action, context, host, params):
         """Call method deliberately designed to make host/service only calls"""
@@ -1384,21 +1396,23 @@ class API(base.Base):
     def suspend(self, context, instance):
         """Suspend the given instance."""
         instance_id = instance["id"]
+        instance_uuid = instance["uuid"]
         self.update(context,
                     instance_id,
                     vm_state=vm_states.ACTIVE,
                     task_state=task_states.SUSPENDING)
-        self._cast_compute_message('suspend_instance', context, instance_id)
+        self._cast_compute_message('suspend_instance', context, instance_uuid)
 
     @scheduler_api.reroute_compute("resume")
     def resume(self, context, instance):
         """Resume the given instance."""
         instance_id = instance["id"]
+        instance_uuid = instance["uuid"]
         self.update(context,
                     instance_id,
                     vm_state=vm_states.SUSPENDED,
                     task_state=task_states.RESUMING)
-        self._cast_compute_message('resume_instance', context, instance_id)
+        self._cast_compute_message('resume_instance', context, instance_uuid)
 
     @scheduler_api.reroute_compute("rescue")
     def rescue(self, context, instance, rescue_password=None):

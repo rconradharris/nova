@@ -120,7 +120,7 @@ class BaseTestCase(test.TestCase):
         self.stubs.Set(rpc, 'call', rpc_call_wrapper)
         self.stubs.Set(rpc, 'cast', rpc_cast_wrapper)
 
-    def _create_instance(self, params=None):
+    def _create_fake_instance(self, params=None):
         """Create a test instance"""
         if not params:
             params = {}
@@ -135,10 +135,14 @@ class BaseTestCase(test.TestCase):
         inst['instance_type_id'] = type_id
         inst['ami_launch_index'] = 0
         inst.update(params)
-        return db.instance_create(self.context, inst)['id']
+        return db.instance_create(self.context, inst)
+
+    def _create_instance(self, params=None):
+        """Return a test instance id"""
+        return self._create_fake_instance(params)['id']
 
     def _create_instance_type(self, params=None):
-        """Create a test instance"""
+        """Create a test instance type"""
         if not params:
             params = {}
 
@@ -243,19 +247,23 @@ class ComputeTestCase(BaseTestCase):
         self.compute.terminate_instance(self.context, instance_id)
 
     def test_pause(self):
-        """Ensure instance can be paused"""
-        instance_id = self._create_instance()
+        """Ensure instance can be paused and unpaused"""
+        instance = self._create_fake_instance()
+        instance_id = instance['id']
+        instance_uuid = instance['uuid']
         self.compute.run_instance(self.context, instance_id)
-        self.compute.pause_instance(self.context, instance_id)
-        self.compute.unpause_instance(self.context, instance_id)
+        self.compute.pause_instance(self.context, instance_uuid)
+        self.compute.unpause_instance(self.context, instance_uuid)
         self.compute.terminate_instance(self.context, instance_id)
 
     def test_suspend(self):
-        """ensure instance can be suspended"""
-        instance_id = self._create_instance()
+        """ensure instance can be suspended and resumed"""
+        instance = self._create_fake_instance()
+        instance_id = instance['id']
+        instance_uuid = instance['uuid']
         self.compute.run_instance(self.context, instance_id)
-        self.compute.suspend_instance(self.context, instance_id)
-        self.compute.resume_instance(self.context, instance_id)
+        self.compute.suspend_instance(self.context, instance_uuid)
+        self.compute.resume_instance(self.context, instance_uuid)
         self.compute.terminate_instance(self.context, instance_id)
 
     def test_reboot_soft(self):
@@ -515,18 +523,20 @@ class ComputeTestCase(BaseTestCase):
 
     def test_lock(self):
         """ensure locked instance cannot be changed"""
-        instance_id = self._create_instance()
+        instance = self._create_fake_instance()
+        instance_id = instance['id']
+        instance_uuid = instance['uuid']
         self.compute.run_instance(self.context, instance_id)
 
         non_admin_context = context.RequestContext(None, None, False, False)
 
         # decorator should return False (fail) with locked nonadmin context
-        self.compute.lock_instance(self.context, instance_id)
+        self.compute.lock_instance(self.context, instance_uuid)
         ret_val = self.compute.reboot_instance(non_admin_context, instance_id)
         self.assertEqual(ret_val, False)
 
         # decorator should return None (success) with unlocked nonadmin context
-        self.compute.unlock_instance(self.context, instance_id)
+        self.compute.unlock_instance(self.context, instance_uuid)
         ret_val = self.compute.reboot_instance(non_admin_context, instance_id)
         self.assertEqual(ret_val, None)
 
@@ -1129,63 +1139,65 @@ class ComputeAPITestCase(BaseTestCase):
 
     def test_suspend(self):
         """Ensure instance can be suspended"""
-        instance_id = self._create_instance()
+        instance = self._create_fake_instance()
+        instance_id = instance['id']
+        instance_uuid = instance['uuid']
         self.compute.run_instance(self.context, instance_id)
 
-        inst_ref = db.instance_get(self.context, instance_id)
-        self.assertEqual(inst_ref['task_state'], None)
+        self.assertEqual(instance['task_state'], None)
 
-        self.compute_api.suspend(self.context, inst_ref)
+        self.compute_api.suspend(self.context, instance)
 
-        inst_ref = db.instance_get(self.context, instance_id)
-        self.assertEqual(inst_ref['task_state'], task_states.SUSPENDING)
+        instance = db.instance_get_by_uuid(self.context, instance_uuid)
+        self.assertEqual(instance['task_state'], task_states.SUSPENDING)
 
         db.instance_destroy(self.context, instance_id)
 
     def test_resume(self):
         """Ensure instance can be resumed"""
-        instance_id = self._create_instance()
+        instance = self._create_fake_instance()
+        instance_id = instance['id']
         self.compute.run_instance(self.context, instance_id)
 
-        inst_ref = db.instance_get(self.context, instance_id)
-        self.assertEqual(inst_ref['task_state'], None)
+        self.assertEqual(instance['task_state'], None)
 
-        self.compute_api.resume(self.context, inst_ref)
+        self.compute_api.resume(self.context, instance)
 
-        inst_ref = db.instance_get(self.context, instance_id)
-        self.assertEqual(inst_ref['task_state'], task_states.RESUMING)
+        instance = db.instance_get_by_uuid(self.context, instance['uuid'])
+        self.assertEqual(instance['task_state'], task_states.RESUMING)
 
         db.instance_destroy(self.context, instance_id)
 
     def test_pause(self):
         """Ensure instance can be paused"""
-        instance_id = self._create_instance()
+        instance = self._create_fake_instance()
+        instance_id = instance['id']
         self.compute.run_instance(self.context, instance_id)
 
-        inst_ref = db.instance_get(self.context, instance_id)
-        self.assertEqual(inst_ref['task_state'], None)
+        self.assertEqual(instance['task_state'], None)
 
-        self.compute_api.pause(self.context, inst_ref)
+        self.compute_api.pause(self.context, instance)
 
-        inst_ref = db.instance_get(self.context, instance_id)
-        self.assertEqual(inst_ref['task_state'], task_states.PAUSING)
+        instance = db.instance_get_by_uuid(self.context, instance['uuid'])
+        self.assertEqual(instance['task_state'], task_states.PAUSING)
 
         db.instance_destroy(self.context, instance_id)
 
     def test_unpause(self):
         """Ensure instance can be unpaused"""
-        instance_id = self._create_instance()
+        instance = self._create_fake_instance()
+        instance_id = instance['id']
+        instance_uuid = instance['uuid']
         self.compute.run_instance(self.context, instance_id)
 
-        inst_ref = db.instance_get(self.context, instance_id)
-        self.assertEqual(inst_ref['task_state'], None)
+        self.assertEqual(instance['task_state'], None)
 
-        self.compute.pause_instance(self.context, instance_id)
+        self.compute.pause_instance(self.context, instance_uuid)
 
-        self.compute_api.unpause(self.context, inst_ref)
+        self.compute_api.unpause(self.context, instance)
 
-        inst_ref = db.instance_get(self.context, instance_id)
-        self.assertEqual(inst_ref['task_state'], task_states.UNPAUSING)
+        instance = db.instance_get_by_uuid(self.context, instance_uuid)
+        self.assertEqual(instance['task_state'], task_states.UNPAUSING)
 
         db.instance_destroy(self.context, instance_id)
 
@@ -1435,6 +1447,43 @@ class ComputeAPITestCase(BaseTestCase):
         # Migrate simply calls resize() without a flavor_id.
         self.compute_api.resize(context, instance, None)
         self.compute.terminate_instance(context, instance_id)
+
+    def test_resize_request_spec(self):
+        def _fake_cast(context, args):
+            request_spec = args['args']['request_spec']
+            self.assertEqual(request_spec['original_host'], 'host2')
+            self.assertEqual(request_spec['avoid_original_host'], True)
+
+        self.stubs.Set(self.compute_api, '_cast_scheduler_message',
+                       _fake_cast)
+
+        context = self.context.elevated()
+        instance_id = self._create_instance(dict(host='host2'))
+        instance = db.instance_get(context, instance_id)
+        self.compute.run_instance(self.context, instance_id)
+        try:
+            self.compute_api.resize(context, instance, None)
+        finally:
+            self.compute.terminate_instance(context, instance_id)
+
+    def test_resize_request_spec_noavoid(self):
+        def _fake_cast(context, args):
+            request_spec = args['args']['request_spec']
+            self.assertEqual(request_spec['original_host'], 'host2')
+            self.assertEqual(request_spec['avoid_original_host'], False)
+
+        self.stubs.Set(self.compute_api, '_cast_scheduler_message',
+                       _fake_cast)
+        self.flags(allow_resize_to_same_host=True)
+
+        context = self.context.elevated()
+        instance_id = self._create_instance(dict(host='host2'))
+        instance = db.instance_get(context, instance_id)
+        self.compute.run_instance(self.context, instance_id)
+        try:
+            self.compute_api.resize(context, instance, None)
+        finally:
+            self.compute.terminate_instance(context, instance_id)
 
     def test_get_all_by_name_regexp(self):
         """Test searching instances by name (display_name)"""
@@ -2096,22 +2145,19 @@ class ComputeAPITestCase(BaseTestCase):
         self.compute_api.reset_network(self.context, instance)
 
     def test_lock(self):
-        instance_id = self._create_instance()
-        instance = self.compute_api.get(self.context, instance_id)
+        instance = self._create_fake_instance()
         self.compute_api.lock(self.context, instance)
         self.compute_api.delete(self.context, instance)
 
     def test_unlock(self):
-        instance_id = self._create_instance()
-        instance = self.compute_api.get(self.context, instance_id)
+        instance = self._create_fake_instance()
         self.compute_api.unlock(self.context, instance)
         self.compute_api.delete(self.context, instance)
 
     def test_get_lock(self):
-        instance_id = self._create_instance()
-        instance = self.compute_api.get(self.context, instance_id)
+        instance = self._create_fake_instance()
         self.assertFalse(self.compute_api.get_lock(self.context, instance))
-        db.instance_update(self.context, instance_id, {'locked': True})
+        db.instance_update(self.context, instance['id'], {'locked': True})
         self.assertTrue(self.compute_api.get_lock(self.context, instance))
 
     def test_add_remove_security_group(self):

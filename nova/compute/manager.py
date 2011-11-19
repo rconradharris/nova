@@ -1925,7 +1925,7 @@ class ComputeManager(manager.SchedulerDependentManager):
                          locals())
                 self._delete_instance(context, instance_id)
 
-    @manager.periodic_task
+    @manager.periodic_task(ticks_between_runs=30)
     def _reap_running_deleted_instances(self, context):
         """Reap any instances which are erroneously still running after
         having been deleted.

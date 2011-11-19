@@ -67,10 +67,28 @@ FLAGS = flags.FLAGS
 LOG = logging.getLogger('nova.manager')
 
 
-def periodic_task(f):
-    """Decorator to indicate that a method is a periodic task."""
-    f._periodic_task = True
-    return f
+def periodic_task(*args, **kwargs):
+    """Decorator to indicate that a method is a periodic task.
+
+    This decorator can be used in two ways:
+
+        1. Without arguments '@periodic_task', this will be run on every tick
+           of the periodic scheduler.
+
+        2. With arguments, @periodic_task(ticks_between_runs=N), this will be
+           run on every N ticks of the periodic scheduler.
+    """
+    if kwargs:
+        def wrapped(f):
+            f._periodic_task = True
+            f._ticks_between_runs = kwargs.pop('ticks_between_runs', 0)
+            return f
+        return wrapped
+    else:
+        f = args[0]
+        f._periodic_task = True
+        f._ticks_between_runs = 0
+        return f
 
 
 class ManagerMeta(type):
@@ -83,9 +101,16 @@ class ManagerMeta(type):
         except AttributeError:
             cls._periodic_tasks = []
 
+        try:
+            cls._ticks_between_runs = cls._ticks_between_runs.copy()
+        except AttributeError:
+            cls._ticks_between_runs = {}
+
         for value in cls.__dict__.values():
             if getattr(value, '_periodic_task', False):
-                cls._periodic_tasks.append(value)
+                name = value.__name__
+                cls._periodic_tasks.append((name, value))
+                cls._ticks_between_runs[name] = value._ticks_between_runs
 
 
 class Manager(base.Base):
@@ -99,11 +124,18 @@ class Manager(base.Base):
 
     def periodic_tasks(self, context, raise_on_error=False):
         """Tasks to be run at a periodic interval."""
-        for task in self._periodic_tasks:
-            task_name = '.'.join(
-                [self.__class__.__name__, task.__name__])
+        for task_name, task in self._periodic_tasks:
+            full_task_name = '.'.join([self.__class__.__name__, task_name])
 
-            LOG.debug(_("Running periodic task %(task_name)s"), locals())
+            ticks_to_skip = self._ticks_between_runs[task_name]
+            if ticks_to_skip > 0:
+                LOG.debug(_("Skipping %(full_task_name)s, %(ticks_to_skip)s"
+                            " ticks left until next run"), locals())
+                self._ticks_between_runs[task_name] -= 1
+                continue
+
+            self._ticks_between_runs[task_name] = task._ticks_between_runs
+            LOG.debug(_("Running periodic task %(full_task_name)s"), locals())
 
             try:
                 task(self, context)
@@ -111,8 +143,8 @@ class Manager(base.Base):
                 if raise_on_error:
                     raise
                 e_tb = traceback.format_exc(e)
-                LOG.error(_("Error during %(task_name)s: %(e)s\n%(e_tb)s"),
-                          locals())
+                LOG.error(_("Error during %(full_task_name)s: %(e)s\n"
+                            "%(e_tb)s"), locals())
 
     def init_host(self):
         """Handle initialization if this is a standalone service.

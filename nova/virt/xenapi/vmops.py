@@ -20,7 +20,6 @@ Management class for VM-related functions (spawn, reboot, etc).
 """
 
 import base64
-import datetime
 import json
 import M2Crypto
 import os

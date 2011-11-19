@@ -1814,46 +1814,6 @@ class ComputeManager(manager.SchedulerDependentManager):
         self.driver.destroy(instance_ref, network_info,
                             block_device_info, True)
 
-    def _instances_on_host_older_than(self, context, host, seconds):
-        instances = self.db.instance_get_all_by_host(context, self.host)
-
-        for instance in instances:
-            if utils.is_older_than(instance.updated_at, seconds):
-                yield instance
-
-    def _bump_instance_updated_at(self, context, instance):
-            self.db.instance_update(context, instance.id,
-                                    {"updated_at": utils.utcnow()})
-
-    @manager.periodic_task
-    def _poll_running_deleted_instances(self, context):
-        """Poll for any instances which are erroneously still running after
-        having been deleted, then log and them down.
-        """
-        if FLAGS.running_deleted_instance_timeout <= 0:
-            LOG.debug(_("FLAGS.running_deleted_instance_timeout <= 0, skipping..."))
-            return
-
-        present_name_labels = set(self.driver.list_instances())
-
-        # NOTE(sirp): admin contexts don't ordinarily return deleted records
-        with utils.temporary_mutation(context, read_deleted=True):
-            instances = self._instances_on_host_older_than(
-                    context, self.host,
-                    FLAGS.running_deleted_instance_timeout)
-
-            for instance in instances:
-                instance_id = instance.id
-                name_label = instance.name
-
-                if instance.deleted and instance.name in present_name_labels:
-                    self._bump_instance_updated_at(context, instance)
-                    LOG.warning(_("Destroying instance %(instance_id)s with name"
-                                  " label '%(name_label)s' which is marked as"
-                                  " DELETED but still present on host."),
-                                locals())
-                    self._delete_instance(context, instance.id)
-
     @manager.periodic_task
     def _poll_rebooting_instances(self, context):
         if FLAGS.reboot_timeout > 0:
@@ -1948,14 +1908,50 @@ class ComputeManager(manager.SchedulerDependentManager):
     @manager.periodic_task
     def _reclaim_queued_deletes(self, context):
         """Reclaim instances that are queued for deletion."""
+        if FLAGS.reclaim_instance_interval <= 0:
+            LOG.debug(_("FLAGS.reclaim_instance_interval <= 0, skipping..."))
+            return
 
         instances = self.db.instance_get_all_by_host(context, self.host)
-
-        queue_time = datetime.timedelta(
-                         seconds=FLAGS.reclaim_instance_interval)
-        curtime = utils.utcnow()
         for instance in instances:
-            if instance['vm_state'] == vm_states.SOFT_DELETE and \
-               (curtime - instance['deleted_at']) >= queue_time:
-                LOG.info('Deleting %s' % instance['name'])
-                self._delete_instance(context, instance['id'])
+            old_enough = (instance.deleted_at and utils.is_older_than(
+                    instance.deleted_at,
+                    FLAGS.reclaim_instance_interval))
+            soft_deleted = instance.vm_state == vm_states.SOFT_DELETE
+
+            if soft_deleted and old_enough:
+                instance_id = instance.id
+                LOG.info(_("Reclaiming deleted instance %(instance_id)s"),
+                         locals())
+                self._delete_instance(context, instance_id)
+
+    @manager.periodic_task
+    def _reap_running_deleted_instances(self, context):
+        """Reap any instances which are erroneously still running after
+        having been deleted.
+        """
+        if FLAGS.running_deleted_instance_timeout <= 0:
+            LOG.debug(_("FLAGS.running_deleted_instance_timeout <= 0,"
+                        " skipping..."))
+            return
+
+        present_name_labels = set(self.driver.list_instances())
+
+        # NOTE(sirp): admin contexts don't ordinarily return deleted records
+        with utils.temporary_mutation(context, read_deleted=True):
+            instances = self.db.instance_get_all_by_host(context, self.host)
+            for instance in instances:
+                present = instance.name in present_name_labels
+                erroneously_running = instance.deleted and present
+                old_enough = (instance.deleted_at and utils.is_older_than(
+                        instance.deleted_at,
+                        FLAGS.running_deleted_instance_timeout))
+
+                if erroneously_running and old_enough:
+                    instance_id = instance.id
+                    name_label = instance.name
+                    LOG.warning(_("Destroying instance %(instance_id)s with"
+                                  " name label '%(name_label)s' which is"
+                                  " marked as DELETED but still present on"
+                                  " host."), locals())
+                    self._delete_instance(context, instance_id)

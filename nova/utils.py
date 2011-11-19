@@ -1074,3 +1074,30 @@ def sanitize_hostname(hostname):
     hostname = hostname.strip('.-')
 
     return hostname
+
+
+@contextlib.contextmanager
+def temporary_mutation(obj, **kwargs):
+    """Temporarily set the attr on a particular object to a given value then
+    revert when finished.
+
+    One use of this is to temporarily set the read_deleted flag on a context
+    object:
+
+        with temporary_mutation(context, read_deleted=True):
+            do_something_that_needed_deleted_objects()
+    """
+    NOT_PRESENT = object()
+
+    old_values = {}
+    for key, new_value in kwargs.items():
+        old_values[key] = getattr(obj, key, NOT_PRESENT)
+        setattr(obj, key, new_value)
+    try:
+        yield
+    finally:
+        for key, old_value in old_values.items():
+            if old_values is NOT_PRESENT:
+                del obj[key]
+            else:
+                setattr(obj, key, old_value)

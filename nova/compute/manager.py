@@ -1914,7 +1914,7 @@ class ComputeManager(manager.SchedulerDependentManager):
 
         instances = self.db.instance_get_all_by_host(context, self.host)
         for instance in instances:
-            old_enough = (instance.deleted_at and utils.is_older_than(
+            old_enough = (not instance.deleted_at or utils.is_older_than(
                     instance.deleted_at,
                     FLAGS.reclaim_instance_interval))
             soft_deleted = instance.vm_state == vm_states.SOFT_DELETE
@@ -1943,7 +1943,7 @@ class ComputeManager(manager.SchedulerDependentManager):
             for instance in instances:
                 present = instance.name in present_name_labels
                 erroneously_running = instance.deleted and present
-                old_enough = (instance.deleted_at and utils.is_older_than(
+                old_enough = (not instance.deleted_at or utils.is_older_than(
                         instance.deleted_at,
                         FLAGS.running_deleted_instance_timeout))
 

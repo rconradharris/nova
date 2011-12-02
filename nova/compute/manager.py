@@ -1938,4 +1938,6 @@ class ComputeManager(manager.SchedulerDependentManager):
                                   " name label '%(name_label)s' which is"
                                   " marked as DELETED but still present on"
                                   " host."), locals())
-                    self._delete_instance(context, instance)
+                    self._shutdown_instance(
+                            context, instance, 'Terminating', True)
+                    self._cleanup_volumes(context, instance_id)

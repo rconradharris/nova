@@ -117,15 +117,16 @@ class ManagerMeta(type):
             cls._periodic_tasks = []
 
         try:
-            cls._ticks_between_runs = cls._ticks_between_runs.copy()
+            cls._ticks_to_skip = cls._ticks_to_skip.copy()
         except AttributeError:
-            cls._ticks_between_runs = {}
+            cls._ticks_to_skip = {}
 
         for value in cls.__dict__.values():
             if getattr(value, '_periodic_task', False):
-                name = value.__name__
-                cls._periodic_tasks.append((name, value))
-                cls._ticks_between_runs[name] = value._ticks_between_runs
+                task = value
+                name = task.__name__
+                cls._periodic_tasks.append((name, task))
+                cls._ticks_to_skip[name] = task._ticks_between_runs
 
 
 class Manager(base.Base):
@@ -142,14 +143,14 @@ class Manager(base.Base):
         for task_name, task in self._periodic_tasks:
             full_task_name = '.'.join([self.__class__.__name__, task_name])
 
-            ticks_to_skip = self._ticks_between_runs[task_name]
+            ticks_to_skip = self._ticks_to_skip[task_name]
             if ticks_to_skip > 0:
                 LOG.debug(_("Skipping %(full_task_name)s, %(ticks_to_skip)s"
                             " ticks left until next run"), locals())
-                self._ticks_between_runs[task_name] -= 1
+                self._ticks_to_skip[task_name] -= 1
                 continue
 
-            self._ticks_between_runs[task_name] = task._ticks_between_runs
+            self._ticks_to_skip[task_name] = task._ticks_between_runs
             LOG.debug(_("Running periodic task %(full_task_name)s"), locals())
 
             try:

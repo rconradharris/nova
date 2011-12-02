@@ -218,9 +218,9 @@ class VMOps(object):
             self._handle_spawn_error(vdis, spawn_error)
             raise spawn_error
 
-    def spawn_rescue(self, context, instance, network_info):
+    def spawn_rescue(self, context, instance, image_meta, network_info):
         """Spawn a rescue instance."""
-        self.spawn(context, instance, network_info)
+        self.spawn(context, instance, image_meta, network_info)
 
     def _create_vm(self, context, instance, vdis, network_info, image_meta):
         """Create VM instance."""
@@ -316,7 +316,7 @@ class VMOps(object):
 
     def _attach_disks(self, instance, disk_image_type, vm_ref, first_vdi_ref,
             vdis):
-        instance_id = instance.id
+        instance_uuid = instance['uuid']
         # device 0 reserved for RW disk
         userdevice = 0
 
@@ -342,7 +342,7 @@ class VMOps(object):
         else:
             if instance.auto_disk_config:
                 LOG.debug(_("Auto configuring disk for instance"
-                            " %(instance_id)s, attempting to"
+                            " %(instance_uuid)s, attempting to"
                             " resize partition...") % locals())
                 VMHelper.auto_configure_disk(session=self._session,
                                              vdi_ref=first_vdi_ref)
@@ -616,10 +616,11 @@ class VMOps(object):
             return
 
     def _migrate_vhd(self, instance, vdi_uuid, dest, sr_path):
-        instance_id = instance.id
+        instance_id = instance['id']
+        instance_uuid = instance['uuid']
         params = {'host': dest,
                   'vdi_uuid': vdi_uuid,
-                  'instance_id': instance_id,
+                  'instance_uuid': instance_uuid,
                   'sr_path': sr_path}
 
         try:
@@ -648,10 +649,10 @@ class VMOps(object):
         # better approximation would use the percentage of the VM image that
         # has been streamed to the destination host.
         progress = round(float(step) / total_steps * 100)
-        instance_id = instance['id']
-        LOG.debug(_("Updating instance '%(instance_id)s' progress to"
+        instance_uuid = instance['uuid']
+        LOG.debug(_("Updating instance '%(instance_uuid)s' progress to"
                     " %(progress)d") % locals())
-        db.instance_update(context, instance_id, {'progress': progress})
+        db.instance_update(context, instance_uuid, {'progress': progress})
 
     def migrate_disk_and_power_off(self, context, instance, dest):
         """Copies a VHD from one host machine to another.
@@ -725,7 +726,7 @@ class VMOps(object):
         """Links the base copy VHD to the COW via the XAPI plugin."""
         new_base_copy_uuid = str(uuid.uuid4())
         new_cow_uuid = str(uuid.uuid4())
-        params = {'instance_id': instance.id,
+        params = {'instance_uuid': instance['uuid'],
                   'old_base_copy_uuid': base_copy_uuid,
                   'old_cow_uuid': cow_uuid,
                   'new_base_copy_uuid': new_base_copy_uuid,
@@ -907,8 +908,8 @@ class VMOps(object):
                     "skipping shutdown...") % locals())
             return
 
-        instance_id = instance.id
-        LOG.debug(_("Shutting down VM for Instance %(instance_id)s")
+        instance_uuid = instance['uuid']
+        LOG.debug(_("Shutting down VM for Instance %(instance_uuid)s")
                   % locals())
         try:
             task = None
@@ -939,8 +940,8 @@ class VMOps(object):
 
     def _destroy_vdis(self, instance, vm_ref):
         """Destroys all VDIs associated with a VM."""
-        instance_id = instance.id
-        LOG.debug(_("Destroying VDIs for Instance %(instance_id)s")
+        instance_uuid = instance['uuid']
+        LOG.debug(_("Destroying VDIs for Instance %(instance_uuid)s")
                   % locals())
         vdi_refs = VMHelper.lookup_vm_vdis(self._session, vm_ref)
 
@@ -995,16 +996,16 @@ class VMOps(object):
                and the ramdisk.
 
         """
-        instance_id = instance.id
+        instance_uuid = instance['uuid']
         if not instance.kernel_id and not instance.ramdisk_id:
             # 1. No kernel or ramdisk
-            LOG.debug(_("Instance %(instance_id)s using RAW or VHD, "
+            LOG.debug(_("Instance %(instance_uuid)s using RAW or VHD, "
                         "skipping kernel and ramdisk deletion") % locals())
             return
 
         if not (instance.kernel_id and instance.ramdisk_id):
             # 2. We only have kernel xor ramdisk
-            raise exception.InstanceUnacceptable(instance_id=instance_id,
+            raise exception.InstanceUnacceptable(instance_id=instance_uuid,
                reason=_("instance has a kernel or ramdisk but not both"))
 
         # 3. We have both kernel and ramdisk
@@ -1016,14 +1017,15 @@ class VMOps(object):
 
     def _destroy_vm(self, instance, vm_ref):
         """Destroys a VM record."""
-        instance_id = instance.id
+        instance_id = instance['id']
+        instance_uuid = instance['uuid']
         try:
             task = self._session.call_xenapi('Async.VM.destroy', vm_ref)
             self._session.wait_for_task(task, instance_id)
         except self.XenAPI.Failure, exc:
             LOG.exception(exc)
 
-        LOG.debug(_("Instance %(instance_id)s VM destroyed") % locals())
+        LOG.debug(_("Instance %(instance_uuid)s VM destroyed") % locals())
 
     def _destroy_rescue_instance(self, rescue_vm_ref):
         """Destroy a rescue instance."""
@@ -1040,8 +1042,8 @@ class VMOps(object):
         destroy_* methods are internal.
 
         """
-        instance_id = instance.id
-        LOG.info(_("Destroying VM for Instance %(instance_id)s") % locals())
+        instance_uuid = instance['uuid']
+        LOG.info(_("Destroying VM for Instance %(instance_uuid)s") % locals())
         vm_ref = VMHelper.lookup(self._session, instance.name)
         return self._destroy(instance, vm_ref, network_info, shutdown=True)
 
@@ -1096,7 +1098,7 @@ class VMOps(object):
                                          vm_ref, False, True)
         self._session.wait_for_task(task, instance.id)
 
-    def rescue(self, context, instance, network_info):
+    def rescue(self, context, instance, network_info, image_meta):
         """Rescue the specified instance.
 
             - shutdown the instance VM.
@@ -1114,7 +1116,7 @@ class VMOps(object):
         self._shutdown(instance, vm_ref)
         self._acquire_bootlock(vm_ref)
         instance._rescue = True
-        self.spawn_rescue(context, instance, network_info)
+        self.spawn_rescue(context, instance, image_meta, network_info)
         rescue_vm_ref = VMHelper.lookup(self._session, instance.name)
         rescue_vbd_ref = self._find_rescue_vbd_ref(vm_ref, rescue_vm_ref)
 
@@ -1132,7 +1134,7 @@ class VMOps(object):
                                         "%s-rescue" % instance.name)
 
         if not rescue_vm_ref:
-            raise exception.InstanceNotInRescueMode(instance_id=instance.id)
+            raise exception.InstanceNotInRescueMode(instance_id=instance.uuid)
 
         original_vm_ref = VMHelper.lookup(self._session, instance.name)
         instance._rescue = False
@@ -1184,7 +1186,7 @@ class VMOps(object):
 
         for instance in instances:
             LOG.info(_("Automatically hard rebooting %d"), instance.id)
-            self.compute_api.reboot(ctxt, instance.id, "HARD")
+            self.compute_api.reboot(ctxt, instance, "HARD")
 
     def poll_rescued_instances(self, timeout):
         """Look for expirable rescued instances.
@@ -1464,9 +1466,9 @@ class VMOps(object):
         try:
             return json.loads(ret)
         except TypeError:
-            instance_id = vm.id
+            instance_uuid = vm['uuid']
             LOG.error(_('The agent call to %(method)s returned an invalid'
-                      ' response: %(ret)r. VM id=%(instance_id)s;'
+                      ' response: %(ret)r. VM id=%(instance_uuid)s;'
                       ' path=%(path)s; args=%(addl_args)r') % locals())
             return {'returncode': 'error',
                     'message': 'unable to deserialize response'}
@@ -1477,7 +1479,8 @@ class VMOps(object):
         Abstracts out the process of calling a method of a xenapi plugin.
         Any errors raised by the plugin will in turn raise a RuntimeError here.
         """
-        instance_id = vm.id
+        instance_id = vm['id']
+        instance_uuid = vm['uuid']
         vm_ref = vm_ref or self._get_vm_opaque_ref(vm)
         vm_rec = self._session.call_xenapi("VM.get_record", vm_ref)
         args = {'dom_id': vm_rec['domid'], 'path': path}
@@ -1490,16 +1493,16 @@ class VMOps(object):
             err_msg = e.details[-1].splitlines()[-1]
             if 'TIMEOUT:' in err_msg:
                 LOG.error(_('TIMEOUT: The call to %(method)s timed out. '
-                        'VM id=%(instance_id)s; args=%(args)r') % locals())
+                        'VM id=%(instance_uuid)s; args=%(args)r') % locals())
                 return {'returncode': 'timeout', 'message': err_msg}
             elif 'NOT IMPLEMENTED:' in err_msg:
                 LOG.error(_('NOT IMPLEMENTED: The call to %(method)s is not'
-                        ' supported by the agent. VM id=%(instance_id)s;'
+                        ' supported by the agent. VM id=%(instance_uuid)s;'
                         ' args=%(args)r') % locals())
                 return {'returncode': 'notimplemented', 'message': err_msg}
             else:
                 LOG.error(_('The call to %(method)s returned an error: %(e)s. '
-                        'VM id=%(instance_id)s; args=%(args)r') % locals())
+                        'VM id=%(instance_uuid)s; args=%(args)r') % locals())
                 return {'returncode': 'error', 'message': err_msg}
         return ret
 

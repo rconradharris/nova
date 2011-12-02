@@ -432,7 +432,7 @@ class XenAPIVMTestCase(test.TestCase):
         self.assertTrue(instance.architecture)
 
     def test_spawn_empty_dns(self):
-        """"Test spawning with an empty dns list"""
+        """Test spawning with an empty dns list"""
         self._test_spawn(glance_stubs.FakeGlance.IMAGE_VHD, None, None,
                          os_type="linux", architecture="x86-64",
                          empty_dns=True)
@@ -641,7 +641,7 @@ class XenAPIVMTestCase(test.TestCase):
     def test_rescue(self):
         instance = self._create_instance()
         conn = xenapi_conn.get_connection(False)
-        conn.rescue(self.context, instance, [])
+        conn.rescue(self.context, instance, [], None)
 
     def test_unrescue(self):
         instance = self._create_instance()

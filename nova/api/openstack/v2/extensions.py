@@ -100,6 +100,24 @@ class ExtensionDescriptor(object):
         request_exts = []
         return request_exts
 
+    @classmethod
+    def nsmap(cls):
+        """Synthesize a namespace map from extension."""
+
+        # Start with a base nsmap
+        nsmap = ext_nsmap.copy()
+
+        # Add the namespace for the extension
+        nsmap[cls.alias] = cls.namespace
+
+        return nsmap
+
+    @classmethod
+    def xmlname(cls, name):
+        """Synthesize element and attribute names."""
+
+        return '{%s}%s' % (cls.namespace, name)
+
 
 class ActionExtensionController(object):
     def __init__(self, application):
@@ -276,7 +294,7 @@ class ExtensionMiddleware(base_wsgi.Middleware):
         mapper = nova.api.openstack.v2.ProjectMapper()
 
         serializer = wsgi.ResponseSerializer(
-            {'application/xml': ExtensionsXMLSerializer()})
+            {'application/xml': wsgi.XMLDictSerializer()})
         # extended resources
         for resource in ext_mgr.get_resources():
             LOG.debug(_('Extended resource: %s'),
@@ -371,8 +389,11 @@ class ExtensionManager(object):
     def get_resources(self):
         """Returns a list of ResourceExtension objects."""
         resources = []
+        serializer = wsgi.ResponseSerializer(
+            {'application/xml': ExtensionsXMLSerializer()})
         resources.append(ResourceExtension('extensions',
-                                            ExtensionsResource(self)))
+                                           ExtensionsResource(self),
+                                           serializer=serializer))
         for ext in self.extensions.values():
             try:
                 resources.extend(ext.get_resources())
@@ -492,43 +513,43 @@ class ResourceExtension(object):
         self.serializer = serializer
 
 
-class ExtensionsXMLSerializer(wsgi.XMLDictSerializer):
+def make_ext(elem):
+    elem.set('name')
+    elem.set('namespace')
+    elem.set('alias')
+    elem.set('updated')
 
-    NSMAP = {None: xmlutil.XMLNS_V11, 'atom': xmlutil.XMLNS_ATOM}
+    desc = xmlutil.SubTemplateElement(elem, 'description')
+    desc.text = 'description'
 
-    def show(self, ext_dict):
-        ext = etree.Element('extension', nsmap=self.NSMAP)
-        self._populate_ext(ext, ext_dict['extension'])
-        return self._to_xml(ext)
+    xmlutil.make_links(elem, 'links')
 
-    def index(self, exts_dict):
-        exts = etree.Element('extensions', nsmap=self.NSMAP)
-        for ext_dict in exts_dict['extensions']:
-            ext = etree.SubElement(exts, 'extension')
-            self._populate_ext(ext, ext_dict)
-        return self._to_xml(exts)
 
-    def _populate_ext(self, ext_elem, ext_dict):
-        """Populate an extension xml element from a dict."""
+ext_nsmap = {None: xmlutil.XMLNS_V11, 'atom': xmlutil.XMLNS_ATOM}
 
-        ext_elem.set('name', ext_dict['name'])
-        ext_elem.set('namespace', ext_dict['namespace'])
-        ext_elem.set('alias', ext_dict['alias'])
-        ext_elem.set('updated', ext_dict['updated'])
-        desc = etree.Element('description')
-        desc.text = ext_dict['description']
-        ext_elem.append(desc)
-        for link in ext_dict.get('links', []):
-            elem = etree.SubElement(ext_elem, '{%s}link' % xmlutil.XMLNS_ATOM)
-            elem.set('rel', link['rel'])
-            elem.set('href', link['href'])
-            elem.set('type', link['type'])
-        return ext_elem
 
-    def _to_xml(self, root):
-        """Convert the xml object to an xml string."""
+class ExtensionTemplate(xmlutil.TemplateBuilder):
+    def construct(self):
+        root = xmlutil.TemplateElement('extension', selector='extension')
+        make_ext(root)
+        return xmlutil.MasterTemplate(root, 1, nsmap=ext_nsmap)
 
-        return etree.tostring(root, encoding='UTF-8')
+
+class ExtensionsTemplate(xmlutil.TemplateBuilder):
+    def construct(self):
+        root = xmlutil.TemplateElement('extensions')
+        elem = xmlutil.SubTemplateElement(root, 'extension',
+                                          selector='extensions')
+        make_ext(elem)
+        return xmlutil.MasterTemplate(root, 1, nsmap=ext_nsmap)
+
+
+class ExtensionsXMLSerializer(xmlutil.XMLTemplateSerializer):
+    def index(self):
+        return ExtensionsTemplate()
+
+    def show(self):
+        return ExtensionTemplate()
 
 
 def admin_only(fnc):
@@ -542,7 +563,7 @@ def admin_only(fnc):
 
 
 def wrap_errors(fn):
-    """"Ensure errors are not passed along."""
+    """Ensure errors are not passed along."""
     def wrapped(*args):
         try:
             return fn(*args)

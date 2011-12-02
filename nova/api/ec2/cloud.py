@@ -1153,7 +1153,7 @@ class CloudController(object):
                 floating_ip = ip_info['floating_ips'][0]
             if ip_info['fixed_ip6s']:
                 i['dnsNameV6'] = ip_info['fixed_ip6s'][0]
-            i['privateDnsName'] = fixed_ip
+            i['privateDnsName'] = instance['hostname']
             i['privateIpAddress'] = fixed_ip
             i['publicDnsName'] = floating_ip
             i['ipAddress'] = floating_ip or fixed_ip
@@ -1354,8 +1354,8 @@ class CloudController(object):
                 changes[field] = kwargs[field]
         if changes:
             instance_id = ec2utils.ec2_id_to_id(instance_id)
-            self.compute_api.update(context, instance_id=instance_id,
-                                    **changes)
+            instance = self.compute_api.get(context, instance_id)
+            self.compute_api.update(context, instance, **changes)
         return True
 
     def _get_image(self, context, ec2_id):

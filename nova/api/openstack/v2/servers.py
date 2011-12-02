@@ -491,19 +491,22 @@ class Controller(wsgi.Controller):
                     body['server']['auto_disk_config'])
             update_dict['auto_disk_config'] = auto_disk_config
 
+        instance = self.compute_api.routing_get(ctxt, id)
+
         try:
-            self.compute_api.update(ctxt, id, **update_dict)
+            self.compute_api.update(ctxt, instance, **update_dict)
         except exception.NotFound:
             raise exc.HTTPNotFound()
 
-        instance = self.compute_api.routing_get(ctxt, id)
+        instance.update(update_dict)
+
         return self._view_builder.show(req, instance)
 
     @exception.novaclient_converter
     @scheduler_api.redirect_handler
     def action(self, req, id, body):
         """Multi-purpose method used to take actions on a server"""
-        self.actions = {
+        _actions = {
             'changePassword': self._action_change_password,
             'reboot': self._action_reboot,
             'resize': self._action_resize,
@@ -517,11 +520,11 @@ class Controller(wsgi.Controller):
             admin_actions = {
                 'createBackup': self._action_create_backup,
             }
-            self.actions.update(admin_actions)
+            _actions.update(admin_actions)
 
         for key in body:
-            if key in self.actions:
-                return self.actions[key](body, req, id)
+            if key in _actions:
+                return _actions[key](body, req, id)
             else:
                 msg = _("There is no such server action: %s") % (key,)
                 raise exc.HTTPBadRequest(explanation=msg)

@@ -197,11 +197,11 @@ class InstanceBusy(NovaException):
 
 
 class InstanceSnapshotting(InstanceBusy):
-    message = _("Instance %(instance_id)s is currently snapshotting.")
+    message = _("Instance %(instance_uuid)s is currently snapshotting.")
 
 
 class InstanceBackingUp(InstanceBusy):
-    message = _("Instance %(instance_id)s is currently being backed up.")
+    message = _("Instance %(instance_uuid)s is currently being backed up.")
 
 
 class Invalid(NovaException):
@@ -396,7 +396,7 @@ class SnapshotNotFound(NotFound):
     message = _("Snapshot %(snapshot_id)s could not be found.")
 
 
-class VolumeIsBusy(Error):
+class VolumeIsBusy(NovaException):
     message = _("deleting volume %(volume_name)s that has snapshot")
 
 
@@ -546,10 +546,6 @@ class FloatingIpNotFound(NotFound):
 
 class FloatingIpNotFoundForAddress(FloatingIpNotFound):
     message = _("Floating ip not found for address %(address)s.")
-
-
-class FloatingIpNotFoundForProject(FloatingIpNotFound):
-    message = _("Floating ip not found for project %(project_id)s.")
 
 
 class FloatingIpNotFoundForHost(FloatingIpNotFound):

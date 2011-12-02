@@ -180,7 +180,7 @@ class RPCAllocateFixedIP(object):
         perform network lookup on the far side of rpc.
         """
         network = self.db.network_get(context, network_id)
-        self.allocate_fixed_ip(context, instance_id, network, **kwargs)
+        return self.allocate_fixed_ip(context, instance_id, network, **kwargs)
 
 
 class FloatingIP(object):
@@ -556,7 +556,13 @@ class NetworkManager(manager.SchedulerDependentManager):
             if vif['instance_id'] is None:
                 continue
 
-            fixed_ipv6 = vif.get('fixed_ipv6')
+            network = self.db.network_get(context, vif['network_id'])
+            fixed_ipv6 = None
+            if network['cidr_v6'] is not None:
+                fixed_ipv6 = ipv6.to_global(network['cidr_v6'],
+                                            vif['address'],
+                                            context.project_id)
+
             if fixed_ipv6 and ipv6_filter.match(fixed_ipv6):
                 # NOTE(jkoelker) Will need to update for the UUID flip
                 results.append({'instance_id': vif['instance_id'],
@@ -674,7 +680,7 @@ class NetworkManager(manager.SchedulerDependentManager):
         # a vif has an address, instance_id, and network_id
         # it is also joined to the instance and network given by those IDs
         for vif in vifs:
-            network = vif['network']
+            network = self.db.network_get(context, vif['network_id'])
 
             if network is None:
                 continue
@@ -697,6 +703,15 @@ class NetworkManager(manager.SchedulerDependentManager):
                                          network['project_id']),
                     'netmask': network['netmask_v6'],
                     'enabled': '1'}
+
+            def rxtx_cap(instance_type, network):
+                try:
+                    rxtx_factor = instance_type['rxtx_factor']
+                    rxtx_base = network['rxtx_base']
+                    return rxtx_factor * rxtx_base
+                except (KeyError, TypeError):
+                    return 0
+
             network_dict = {
                 'bridge': network['bridge'],
                 'id': network['id'],
@@ -719,7 +734,7 @@ class NetworkManager(manager.SchedulerDependentManager):
                 'broadcast': network['broadcast'],
                 'mac': vif['address'],
                 'vif_uuid': vif['uuid'],
-                'rxtx_cap': instance_type['rxtx_cap'],
+                'rxtx_cap': rxtx_cap(instance_type, network),
                 'dns': [],
                 'ips': [ip_dict(ip) for ip in network_IPs],
                 'should_create_bridge': self.SHOULD_CREATE_BRIDGE,

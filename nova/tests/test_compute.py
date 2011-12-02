@@ -1031,7 +1031,7 @@ class ComputeTestCase(BaseTestCase):
 
         # Force the compute manager to do its periodic poll
         ctxt = context.get_admin_context()
-        error_list = self.compute.periodic_tasks(ctxt, raise_on_error=True)
+        self.compute.periodic_tasks(ctxt, raise_on_error=True)
 
         instances = db.instance_get_all(context.get_admin_context())
         LOG.info(_("After force-killing instances: %s"), instances)

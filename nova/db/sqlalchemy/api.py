@@ -3928,6 +3928,12 @@ def sm_backend_conf_get_all(context):
 ####################
 
 
+def _sm_flavor_get_query(context, sm_flavor_label, session=None):
+    return model_query(context, models.SMFlavors, session=session,
+                       deleted_visibility="visible").\
+                        filter_by(label=sm_flavor_label)
+
+
 @require_admin_context
 def sm_flavor_create(context, values):
     sm_flavor = models.SMFlavors()
@@ -3938,12 +3944,7 @@ def sm_flavor_create(context, values):
 
 @require_admin_context
 def sm_flavor_update(context, sm_flavor_label, values):
-    session = get_session()
-    sm_flavor = session.query(models.SMFlavors).\
-                        filter_by(label=sm_flavor_label)
-    if not sm_flavor:
-        raise exception.NotFound(_("No sm_flavor with id "\
-                                   "%(sm_flavor_id)s") % locals())
+    sm_flavor = sm_flavor_get(context, sm_flavor_label)
     sm_flavor.update(values)
     sm_flavor.save()
     return sm_flavor
@@ -3953,25 +3954,24 @@ def sm_flavor_update(context, sm_flavor_label, values):
 def sm_flavor_delete(context, sm_flavor_label):
     session = get_session()
     with session.begin():
-        session.query(models.SMFlavors).\
-                filter_by(label=sm_flavor_label).\
-                delete()
+        _sm_flavor_get_query(context, sm_flavor_label).delete()
 
 
 @require_admin_context
-def sm_flavor_get(context, sm_flavor):
-    session = get_session()
-    result = session.query(models.SMFlavors).filter_by(label=sm_flavor)
+def sm_flavor_get(context, sm_flavor_label):
+    result = _sm_flavor_get_query(context, sm_flavor_label).first()
+
     if not result:
-        raise exception.NotFound(_("No sm_flavor called %(sm_flavor)s") \
-                                 % locals())
+        raise exception.NotFound(
+                _("No sm_flavor called %(sm_flavor)s") % locals())
+
     return result
 
 
 @require_admin_context
 def sm_flavor_get_all(context):
-    session = get_session()
-    return session.query(models.SMFlavors).all()
+    return model_query(context, models.SMFlavors,
+                       deleted_visibility="visible").all()
 
 
 ###############################

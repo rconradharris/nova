@@ -150,7 +150,7 @@ def require_volume_exists(f):
 
 
 def model_query(context, *args, **kwargs):
-    session = kwargs.get('session', get_session())
+    session = kwargs.get('session') or get_session()
     deleted_visibility = kwargs.get('deleted_visibility')
 
     query = session.query(*args)
@@ -687,10 +687,10 @@ def fixed_ip_associate(context, address, instance_id, network_id=None,
     with session.begin():
         network_or_none = or_(models.FixedIp.network_id == network_id,
                               models.FixedIp.network_id == None)
-        fixed_ip_ref = session.query(models.FixedIp).\
+        fixed_ip_ref = model_query(context, models.FixedIp, session=session,
+                                   deleted_visibility="not_visible").\
                                filter(network_or_none).\
                                filter_by(reserved=reserved).\
-                               filter_by(deleted=False).\
                                filter_by(address=address).\
                                with_lockmode('update').\
                                first()
@@ -719,10 +719,10 @@ def fixed_ip_associate_pool(context, network_id, instance_id=None, host=None):
     with session.begin():
         network_or_none = or_(models.FixedIp.network_id == network_id,
                               models.FixedIp.network_id == None)
-        fixed_ip_ref = session.query(models.FixedIp).\
+        fixed_ip_ref = model_query(context, models.FixedIp, session=session,
+                                   deleted_visibility="not_visible").\
                                filter(network_or_none).\
                                filter_by(reserved=False).\
-                               filter_by(deleted=False).\
                                filter_by(instance=None).\
                                filter_by(host=None).\
                                with_lockmode('update').\
@@ -777,10 +777,12 @@ def fixed_ip_disassociate(context, address):
 @require_admin_context
 def fixed_ip_disassociate_all_by_timeout(_context, host, time):
     session = get_session()
-    inner_q = session.query(models.Network.id).\
+    inner_q = model_query(context, models.Network.id, session=session,
+                          deleted_visibility="visible").\
                       filter_by(host=host).\
                       subquery()
-    result = session.query(models.FixedIp).\
+    result = model_query(context, models.FixedIp, session=session,
+                         deleted_visibility="visible").\
                      filter(models.FixedIp.network_id.in_(inner_q)).\
                      filter(models.FixedIp.updated_at < time).\
                      filter(models.FixedIp.instance_id != None).\
@@ -794,11 +796,8 @@ def fixed_ip_disassociate_all_by_timeout(_context, host, time):
 
 @require_context
 def fixed_ip_get(context, id, session=None):
-    if not session:
-        session = get_session()
-    result = session.query(models.FixedIp).\
+    result = model_query(context, models.FixedIp, session=session).\
                      filter_by(id=id).\
-                     filter_by(deleted=can_read_deleted(context)).\
                      options(joinedload('floating_ips')).\
                      options(joinedload('network')).\
                      first()
@@ -813,9 +812,8 @@ def fixed_ip_get(context, id, session=None):
 
 @require_admin_context
 def fixed_ip_get_all(context, session=None):
-    if not session:
-        session = get_session()
-    result = session.query(models.FixedIp).\
+    result = model_query(context, models.FixedIp, session=session,
+                         deleted_visibility="visible").\
                      options(joinedload('floating_ips')).\
                      all()
     if not result:
@@ -826,9 +824,8 @@ def fixed_ip_get_all(context, session=None):
 
 @require_admin_context
 def fixed_ip_get_all_by_instance_host(context, host=None):
-    session = get_session()
-
-    result = session.query(models.FixedIp).\
+    result = model_query(context, models.FixedIp,
+                         deleted_visibility="visible").\
                      options(joinedload('floating_ips')).\
                      join(models.FixedIp.instance).\
                      filter_by(state=1).\
@@ -843,11 +840,9 @@ def fixed_ip_get_all_by_instance_host(context, host=None):
 
 @require_context
 def fixed_ip_get_by_address(context, address, session=None):
-    if not session:
-        session = get_session()
-    result = session.query(models.FixedIp).\
+    result = model_query(context, models.FixedIp, session=session,
+                         deleted_visibility="visible").\
                      filter_by(address=address).\
-                     filter_by(deleted=can_read_deleted(context)).\
                      options(joinedload('floating_ips')).\
                      options(joinedload('network')).\
                      options(joinedload('instance')).\
@@ -863,42 +858,44 @@ def fixed_ip_get_by_address(context, address, session=None):
 
 @require_context
 def fixed_ip_get_by_instance(context, instance_id):
-    session = get_session()
-    rv = session.query(models.FixedIp).\
+    result = model_query(context, models.FixedIp,
+                         deleted_visibility="not_visible").\
                  options(joinedload('floating_ips')).\
                  filter_by(instance_id=instance_id).\
-                 filter_by(deleted=False).\
                  all()
-    if not rv:
+
+    if not result:
         raise exception.FixedIpNotFoundForInstance(instance_id=instance_id)
-    return rv
+
+    return result
 
 
 @require_context
 def fixed_ip_get_by_network_host(context, network_id, host):
-    session = get_session()
-    rv = session.query(models.FixedIp).\
+    result = model_query(context, models.FixedIp,
+                         deleted_visibility="not_visible").\
                  filter_by(network_id=network_id).\
                  filter_by(host=host).\
-                 filter_by(deleted=False).\
                  first()
-    if not rv:
+
+    if not result:
         raise exception.FixedIpNotFoundForNetworkHost(network_id=network_id,
                                                       host=host)
-    return rv
+    return result
 
 
 @require_context
 def fixed_ip_get_by_virtual_interface(context, vif_id):
-    session = get_session()
-    rv = session.query(models.FixedIp).\
+    result = model_query(context, models.FixedIp,
+                         deleted_visibility="not_visible").\
                  options(joinedload('floating_ips')).\
                  filter_by(virtual_interface_id=vif_id).\
-                 filter_by(deleted=False).\
                  all()
-    if not rv:
+
+    if not result:
         raise exception.FixedIpNotFoundForVirtualInterface(vif_id=vif_id)
-    return rv
+
+    return result
 
 
 @require_admin_context

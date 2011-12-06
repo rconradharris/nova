@@ -2378,21 +2378,13 @@ def snapshot_destroy(context, snapshot_id):
 
 @require_context
 def snapshot_get(context, snapshot_id, session=None):
-    if not session:
-        session = get_session()
-    result = None
+    query = model_query(context, models.Snapshot, session=session).\
+                filter_by(id=snapshot_id)
 
-    if is_admin_context(context):
-        result = session.query(models.Snapshot).\
-                         filter_by(id=snapshot_id).\
-                         filter_by(deleted=can_read_deleted(context)).\
-                         first()
-    elif is_user_context(context):
-        result = session.query(models.Snapshot).\
-                         filter_by(project_id=context.project_id).\
-                         filter_by(id=snapshot_id).\
-                         filter_by(deleted=False).\
-                         first()
+    if is_user_context(context):
+        query = query.filter_by(project_id=context.project_id)
+
+    result = query.first()
     if not result:
         raise exception.SnapshotNotFound(snapshot_id=snapshot_id)
 
@@ -2401,20 +2393,14 @@ def snapshot_get(context, snapshot_id, session=None):
 
 @require_admin_context
 def snapshot_get_all(context):
-    session = get_session()
-    return session.query(models.Snapshot).\
-                   filter_by(deleted=can_read_deleted(context)).\
-                   all()
+    return model_query(context, models.Snapshot).all()
 
 
 @require_context
 def snapshot_get_all_by_project(context, project_id):
     authorize_project_context(context, project_id)
-
-    session = get_session()
-    return session.query(models.Snapshot).\
+    return model_query(context, models.Snapshot).\
                    filter_by(project_id=project_id).\
-                   filter_by(deleted=can_read_deleted(context)).\
                    all()
 
 

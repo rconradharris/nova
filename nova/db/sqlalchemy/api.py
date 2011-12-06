@@ -1603,27 +1603,23 @@ def key_pair_destroy_all_by_user(context, user_id):
 @require_context
 def key_pair_get(context, user_id, name, session=None):
     authorize_user_context(context, user_id)
-
-    if not session:
-        session = get_session()
-
-    result = session.query(models.KeyPair).\
+    result = model_query(context, models.KeyPair, session=session).\
                      filter_by(user_id=user_id).\
                      filter_by(name=name).\
-                     filter_by(deleted=can_read_deleted(context)).\
                      first()
+
     if not result:
         raise exception.KeypairNotFound(user_id=user_id, name=name)
+
     return result
 
 
 @require_context
 def key_pair_get_all_by_user(context, user_id):
     authorize_user_context(context, user_id)
-    session = get_session()
-    return session.query(models.KeyPair).\
+    return model_query(context, models.KeyPair,
+                       deleted_visibility="not_visible").\
                    filter_by(user_id=user_id).\
-                   filter_by(deleted=False).\
                    all()
 
 

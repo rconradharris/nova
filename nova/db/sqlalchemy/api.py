@@ -2416,6 +2416,11 @@ def snapshot_update(context, snapshot_id, values):
 ###################
 
 
+def _block_device_mapping_get_query(context, session=None):
+    return model_query(context, models.BlockDeviceMapping, session=session,
+                       deleted_visibility="not_visible")
+
+
 @require_context
 def block_device_mapping_create(context, values):
     bdm_ref = models.BlockDeviceMapping()
@@ -2430,9 +2435,8 @@ def block_device_mapping_create(context, values):
 def block_device_mapping_update(context, bdm_id, values):
     session = get_session()
     with session.begin():
-        session.query(models.BlockDeviceMapping).\
+        _block_device_mapping_get_query(context, session=session).\
                 filter_by(id=bdm_id).\
-                filter_by(deleted=False).\
                 update(values)
 
 
@@ -2440,10 +2444,9 @@ def block_device_mapping_update(context, bdm_id, values):
 def block_device_mapping_update_or_create(context, values):
     session = get_session()
     with session.begin():
-        result = session.query(models.BlockDeviceMapping).\
+        result = _block_device_mapping_get_query(context, session=session).\
                  filter_by(instance_id=values['instance_id']).\
                  filter_by(device_name=values['device_name']).\
-                 filter_by(deleted=False).\
                  first()
         if not result:
             bdm_ref = models.BlockDeviceMapping()
@@ -2458,25 +2461,20 @@ def block_device_mapping_update_or_create(context, values):
         if (virtual_name is not None and
             block_device.is_swap_or_ephemeral(virtual_name)):
             session.query(models.BlockDeviceMapping).\
-            filter_by(instance_id=values['instance_id']).\
-            filter_by(virtual_name=virtual_name).\
-            filter(models.BlockDeviceMapping.device_name !=
-                   values['device_name']).\
-            update({'deleted': True,
-                    'deleted_at': utils.utcnow(),
-                    'updated_at': literal_column('updated_at')})
+                filter_by(instance_id=values['instance_id']).\
+                filter_by(virtual_name=virtual_name).\
+                filter(models.BlockDeviceMapping.device_name !=
+                       values['device_name']).\
+                update({'deleted': True,
+                        'deleted_at': utils.utcnow(),
+                        'updated_at': literal_column('updated_at')})
 
 
 @require_context
 def block_device_mapping_get_all_by_instance(context, instance_id):
-    session = get_session()
-    result = session.query(models.BlockDeviceMapping).\
-             filter_by(instance_id=instance_id).\
-             filter_by(deleted=False).\
-             all()
-    if not result:
-        return []
-    return result
+    return _block_device_mapping_get_query(context).\
+                 filter_by(instance_id=instance_id).\
+                 all()
 
 
 @require_context
@@ -2495,13 +2493,12 @@ def block_device_mapping_destroy_by_instance_and_volume(context, instance_id,
                                                         volume_id):
     session = get_session()
     with session.begin():
-        session.query(models.BlockDeviceMapping).\
-        filter_by(instance_id=instance_id).\
-        filter_by(volume_id=volume_id).\
-        filter_by(deleted=False).\
-        update({'deleted': True,
-                'deleted_at': utils.utcnow(),
-                'updated_at': literal_column('updated_at')})
+        _block_device_mapping_get_query(context, session=session).\
+            filter_by(instance_id=instance_id).\
+            filter_by(volume_id=volume_id).\
+            update({'deleted': True,
+                    'deleted_at': utils.utcnow(),
+                    'updated_at': literal_column('updated_at')})
 
 
 ###################

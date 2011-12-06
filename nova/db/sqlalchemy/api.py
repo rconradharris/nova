@@ -2080,18 +2080,22 @@ def quota_destroy_all_by_project(context, project_id):
 def volume_allocate_iscsi_target(context, volume_id, host):
     session = get_session()
     with session.begin():
-        iscsi_target_ref = session.query(models.IscsiTarget).\
+        iscsi_target_ref = model_query(context, models.IscsiTarget,
+                                       session=session,
+                                       deleted_visibility="not_visible").\
                                 filter_by(volume=None).\
                                 filter_by(host=host).\
-                                filter_by(deleted=False).\
                                 with_lockmode('update').\
                                 first()
+
         # NOTE(vish): if with_lockmode isn't supported, as in sqlite,
         #             then this has concurrency issues
         if not iscsi_target_ref:
             raise db.NoMoreTargets()
+
         iscsi_target_ref.volume_id = volume_id
         session.add(iscsi_target_ref)
+
     return iscsi_target_ref.target_num
 
 
@@ -2123,12 +2127,13 @@ def volume_create(context, values):
 
 @require_admin_context
 def volume_data_get_for_project(context, project_id):
-    session = get_session()
-    result = session.query(func.count(models.Volume.id),
-                           func.sum(models.Volume.size)).\
+    result = model_query(context,
+                         func.count(models.Volume.id),
+                         func.sum(models.Volume.size),
+                         deleted_visibility="not_visible").\
                      filter_by(project_id=project_id).\
-                     filter_by(deleted=False).\
                      first()
+
     # NOTE(vish): convert None to 0
     return (result[0] or 0, result[1] or 0)
 
@@ -2165,28 +2170,25 @@ def volume_detached(context, volume_id):
 
 
 @require_context
-def volume_get(context, volume_id, session=None):
-    if not session:
-        session = get_session()
-    result = None
+def _volume_get_query(context, session=None):
+    return model_query(context, models.Volume, session=session).\
+                     options(joinedload('instance')).\
+                     options(joinedload('volume_metadata')).\
+                     options(joinedload('volume_type'))
 
-    if is_admin_context(context):
-        result = session.query(models.Volume).\
-                         options(joinedload('instance')).\
-                         options(joinedload('volume_metadata')).\
-                         options(joinedload('volume_type')).\
-                         filter_by(id=volume_id).\
-                         filter_by(deleted=can_read_deleted(context)).\
-                         first()
-    elif is_user_context(context):
-        result = session.query(models.Volume).\
-                         options(joinedload('instance')).\
-                         options(joinedload('volume_metadata')).\
-                         options(joinedload('volume_type')).\
-                         filter_by(project_id=context.project_id).\
-                         filter_by(id=volume_id).\
-                         filter_by(deleted=False).\
-                         first()
+
+@require_context
+def volume_get(context, volume_id, session=None):
+    query = _volume_get_query(context).filter_by(id=volume_id)
+
+    if is_user_context(context):
+        # TODO(sirp): filtering by project if is_user_context is a common
+        # pattern in this file, perhaps this should be extracted to a
+        # function.
+        query = query.filter_by(project_id=context.project_id)
+
+    result = query.first()
+
     if not result:
         raise exception.VolumeNotFound(volume_id=volume_id)
 
@@ -2195,65 +2197,39 @@ def volume_get(context, volume_id, session=None):
 
 @require_admin_context
 def volume_get_all(context):
-    session = get_session()
-    return session.query(models.Volume).\
-                   options(joinedload('instance')).\
-                   options(joinedload('volume_metadata')).\
-                   options(joinedload('volume_type')).\
-                   filter_by(deleted=can_read_deleted(context)).\
-                   all()
+    return _volume_get_query(context).all()
 
 
 @require_admin_context
 def volume_get_all_by_host(context, host):
-    session = get_session()
-    return session.query(models.Volume).\
-                   options(joinedload('instance')).\
-                   options(joinedload('volume_metadata')).\
-                   options(joinedload('volume_type')).\
-                   filter_by(host=host).\
-                   filter_by(deleted=can_read_deleted(context)).\
-                   all()
+    return _volume_get_query(context).filter_by(host=host).all()
 
 
 @require_admin_context
 def volume_get_all_by_instance(context, instance_id):
-    session = get_session()
-    result = session.query(models.Volume).\
+    result = model_query(context, models.Volume,
+                         deleted_visibility="not_visible").\
                      options(joinedload('volume_metadata')).\
                      options(joinedload('volume_type')).\
                      filter_by(instance_id=instance_id).\
-                     filter_by(deleted=False).\
                      all()
+
     if not result:
         raise exception.VolumeNotFoundForInstance(instance_id=instance_id)
+
     return result
 
 
 @require_context
 def volume_get_all_by_project(context, project_id):
     authorize_project_context(context, project_id)
-
-    session = get_session()
-    return session.query(models.Volume).\
-                   options(joinedload('instance')).\
-                   options(joinedload('volume_metadata')).\
-                   options(joinedload('volume_type')).\
-                   filter_by(project_id=project_id).\
-                   filter_by(deleted=can_read_deleted(context)).\
-                   all()
+    return _volume_get_query(context).filter_by(project_id=project_id).all()
 
 
 @require_admin_context
 def volume_get_instance(context, volume_id):
-    session = get_session()
-    result = session.query(models.Volume).\
-                     filter_by(id=volume_id).\
-                     filter_by(deleted=can_read_deleted(context)).\
-                     options(joinedload('instance')).\
-                     options(joinedload('volume_metadata')).\
-                     options(joinedload('volume_type')).\
-                     first()
+    result = _volume_get_query(context).filter_by(id=volume_id).first()
+
     if not result:
         raise exception.VolumeNotFound(volume_id=volume_id)
 
@@ -2262,10 +2238,11 @@ def volume_get_instance(context, volume_id):
 
 @require_admin_context
 def volume_get_iscsi_target_num(context, volume_id):
-    session = get_session()
-    result = session.query(models.IscsiTarget).\
+    result = model_query(context, models.IscsiTarget,
+                         deleted_visibility="visible").\
                      filter_by(volume_id=volume_id).\
                      first()
+
     if not result:
         raise exception.ISCSITargetNotFoundForVolume(volume_id=volume_id)
 

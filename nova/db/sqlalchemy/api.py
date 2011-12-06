@@ -3977,6 +3977,12 @@ def sm_flavor_get_all(context):
 ###############################
 
 
+def _sm_volume_get_query(context, volume_id, session=None):
+    return model_query(context, models.SMVolume, session=session,
+                       deleted_visibility="visible").\
+                        filter_by(id=volume_id)
+
+
 def sm_volume_create(context, values):
     sm_volume = models.SMVolume()
     sm_volume.update(values)
@@ -3985,11 +3991,7 @@ def sm_volume_create(context, values):
 
 
 def sm_volume_update(context, volume_id, values):
-    session = get_session()
-    sm_volume = session.query(models.SMVolume).filter_by(id=volume_id).first()
-    if not sm_volume:
-        raise exception.NotFound(_("No sm_volume with id %(volume_id)s") \
-                                 % locals())
+    sm_volume = sm_volume_get(context, volume_id)
     sm_volume.update(values)
     sm_volume.save()
     return sm_volume
@@ -3998,20 +4000,19 @@ def sm_volume_update(context, volume_id, values):
 def sm_volume_delete(context, volume_id):
     session = get_session()
     with session.begin():
-        session.query(models.SMVolume).\
-                filter_by(id=volume_id).\
-                delete()
+        _sm_volume_get_query(context, volume_id, session=session).delete()
 
 
 def sm_volume_get(context, volume_id):
-    session = get_session()
-    result = session.query(models.SMVolume).filter_by(id=volume_id).first()
+    result = _sm_volume_get_query(context, volume_id).first()
+
     if not result:
-        raise exception.NotFound(_("No sm_volume with id %(volume_id)s") \
-                                 % locals())
+        raise exception.NotFound(
+                _("No sm_volume with id %(volume_id)s")  % locals())
+
     return result
 
 
 def sm_volume_get_all(context):
-    session = get_session()
-    return session.query(models.SMVolume).all()
+    return model_query(context, models.SMVolume,
+                       deleted_visibility="visible").all()

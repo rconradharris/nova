@@ -398,12 +398,8 @@ def compute_node_update(context, compute_id, values):
 
 @require_admin_context
 def certificate_get(context, certificate_id, session=None):
-    if not session:
-        session = get_session()
-
-    result = session.query(models.Certificate).\
+    result = model_query(context, models.Certificate, session=session).\
                      filter_by(id=certificate_id).\
-                     filter_by(deleted=can_read_deleted(context)).\
                      first()
 
     if not result:
@@ -433,29 +429,26 @@ def certificate_destroy(context, certificate_id):
 
 @require_admin_context
 def certificate_get_all_by_project(context, project_id):
-    session = get_session()
-    return session.query(models.Certificate).\
+    return model_query(context, models.Certificate,
+                       deleted_visibility="not_visible").\
                    filter_by(project_id=project_id).\
-                   filter_by(deleted=False).\
                    all()
 
 
 @require_admin_context
 def certificate_get_all_by_user(context, user_id):
-    session = get_session()
-    return session.query(models.Certificate).\
+    return model_query(context, models.Certificate,
+                       deleted_visibility="not_visible").\
                    filter_by(user_id=user_id).\
-                   filter_by(deleted=False).\
                    all()
 
 
 @require_admin_context
-def certificate_get_all_by_user_and_project(_context, user_id, project_id):
-    session = get_session()
-    return session.query(models.Certificate).\
+def certificate_get_all_by_user_and_project(context, user_id, project_id):
+    return model_query(context, models.Certificate,
+                       deleted_visibility="not_visible").\
                    filter_by(user_id=user_id).\
                    filter_by(project_id=project_id).\
-                   filter_by(deleted=False).\
                    all()
 
 

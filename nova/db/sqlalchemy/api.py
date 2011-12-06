@@ -469,23 +469,16 @@ def certificate_update(context, certificate_id, values):
 
 @require_context
 def floating_ip_get(context, id):
-    session = get_session()
-    result = None
-    if is_admin_context(context):
-        result = session.query(models.FloatingIp).\
-                         options(joinedload('fixed_ip')).\
-                         options(joinedload_all('fixed_ip.instance')).\
-                         filter_by(id=id).\
-                         filter_by(deleted=can_read_deleted(context)).\
-                         first()
-    elif is_user_context(context):
-        result = session.query(models.FloatingIp).\
-                         options(joinedload('fixed_ip')).\
-                         options(joinedload_all('fixed_ip.instance')).\
-                         filter_by(project_id=context.project_id).\
-                         filter_by(id=id).\
-                         filter_by(deleted=False).\
-                         first()
+    query = model_query(context, models.FloatingIp).\
+                 options(joinedload('fixed_ip')).\
+                 options(joinedload_all('fixed_ip.instance')).\
+                 filter_by(id=id)
+
+    if is_user_context(context):
+        query = query.filter_by(project_id=context.project_id)
+
+    result = query.first()
+
     if not result:
         raise exception.FloatingIpNotFound(id=id)
 
@@ -497,10 +490,11 @@ def floating_ip_allocate_address(context, project_id):
     authorize_project_context(context, project_id)
     session = get_session()
     with session.begin():
-        floating_ip_ref = session.query(models.FloatingIp).\
+        floating_ip_ref = model_query(context, models.FloatingIp,
+                                      session=session,
+                                      deleted_visibility="not_visible").\
                                   filter_by(fixed_ip_id=None).\
                                   filter_by(project_id=None).\
-                                  filter_by(deleted=False).\
                                   with_lockmode('update').\
                                   first()
         # NOTE(vish): if with_lockmode isn't supported, as in sqlite,
@@ -523,12 +517,11 @@ def floating_ip_create(context, values):
 @require_context
 def floating_ip_count_by_project(context, project_id):
     authorize_project_context(context, project_id)
-    session = get_session()
     # TODO(tr3buchet): why leave auto_assigned floating IPs out?
-    return session.query(models.FloatingIp).\
+    return model_query(context, models.FloatingIp,
+                       deleted_visibility="not_deleted").\
                    filter_by(project_id=project_id).\
                    filter_by(auto_assigned=False).\
-                   filter_by(deleted=False).\
                    count()
 
 
@@ -600,13 +593,17 @@ def floating_ip_set_auto_assigned(context, address):
         floating_ip_ref.save(session=session)
 
 
+
+@require_admin_context
+def _floating_ip_get_all(context):
+    return model_query(context, models.FloatingIp,
+                       deleted_visibility="not_visible").\
+               options(joinedload_all('fixed_ip.instance'))
+
+
 @require_admin_context
 def floating_ip_get_all(context):
-    session = get_session()
-    floating_ip_refs = session.query(models.FloatingIp).\
-                               options(joinedload_all('fixed_ip.instance')).\
-                               filter_by(deleted=False).\
-                               all()
+    floating_ip_refs = _floating_ip_get_all(context).all()
     if not floating_ip_refs:
         raise exception.NoFloatingIpsDefined()
     return floating_ip_refs
@@ -614,12 +611,9 @@ def floating_ip_get_all(context):
 
 @require_admin_context
 def floating_ip_get_all_by_host(context, host):
-    session = get_session()
-    floating_ip_refs = session.query(models.FloatingIp).\
-                               options(joinedload_all('fixed_ip.instance')).\
-                               filter_by(host=host).\
-                               filter_by(deleted=False).\
-                               all()
+    floating_ip_refs = _floating_ip_get_all(context).\
+                            filter_by(host=host).\
+                            all()
     if not floating_ip_refs:
         raise exception.FloatingIpNotFoundForHost(host=host)
     return floating_ip_refs
@@ -628,25 +622,18 @@ def floating_ip_get_all_by_host(context, host):
 @require_context
 def floating_ip_get_all_by_project(context, project_id):
     authorize_project_context(context, project_id)
-    session = get_session()
     # TODO(tr3buchet): why do we not want auto_assigned floating IPs here?
-    return session.query(models.FloatingIp).\
-                         options(joinedload_all('fixed_ip.instance')).\
+    return _floating_ip_get_all(context).\
                          filter_by(project_id=project_id).\
                          filter_by(auto_assigned=False).\
-                         filter_by(deleted=False).\
                          all()
 
 
 @require_context
 def floating_ip_get_by_address(context, address, session=None):
-    if not session:
-        session = get_session()
-
-    result = session.query(models.FloatingIp).\
+    result = model_query(context, models.FloatingIp, session=session).\
                 options(joinedload_all('fixed_ip.network')).\
                 filter_by(address=address).\
-                filter_by(deleted=can_read_deleted(context)).\
                 first()
 
     if not result:
@@ -668,10 +655,9 @@ def floating_ip_get_by_fixed_address(context, fixed_address, session=None):
     fixed_ip = fixed_ip_get_by_address(context, fixed_address, session)
     fixed_ip_id = fixed_ip['id']
 
-    return session.query(models.FloatingIp).\
+    return model_query(context, models.FloatingIp, session=session).\
                    options(joinedload_all('fixed_ip.network')).\
                    filter_by(fixed_ip_id=fixed_ip_id).\
-                   filter_by(deleted=can_read_deleted(context)).\
                    all()
 
     # NOTE(tr3buchet) please don't invent an exception here, empty list is fine

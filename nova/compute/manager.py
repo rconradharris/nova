@@ -74,10 +74,6 @@ flags.DEFINE_string('console_host', socket.gethostname(),
 flags.DEFINE_integer('live_migration_retry_count', 30,
                      "Retry count needed in live_migration."
                      " sleep 1 sec for each count")
-flags.DEFINE_integer("running_deleted_instance_timeout", 0,
-                     "Automatically destroy any instances which are"
-                     " still running N seconds after being deleted."
-                     " Set to 0 to disable.")
 flags.DEFINE_integer("reboot_timeout", 0,
                      "Automatically hard reboot an instance if it has been "
                      "stuck in a rebooting state longer than N seconds."
@@ -90,6 +86,13 @@ flags.DEFINE_integer("resize_confirm_window", 0,
                      " Set to 0 to disable.")
 flags.DEFINE_integer('host_state_interval', 120,
                      'Interval in seconds for querying the host status')
+flags.DEFINE_integer("running_deleted_instance_timeout", 0,
+                     "Number of seconds after being deleted when a"
+                     " still-running instance should be considered"
+                     " eligble for reaping. Set to 0 to disable.")
+flags.DEFINE_integer("running_deleted_instance_ticks_between_reap", 30,
+                     "Number of periodic scheduler ticks to wait between"
+                     " runs of the reaper task.")
 
 LOG = logging.getLogger('nova.compute.manager')
 
@@ -1912,7 +1915,8 @@ class ComputeManager(manager.SchedulerDependentManager):
                          locals())
                 self._delete_instance(context, instance)
 
-    @manager.periodic_task(ticks_between_runs=30)
+    @manager.periodic_task(ticks_between_runs=
+                           FLAGS.running_deleted_instance_ticks_between_reap)
     def _reap_running_deleted_instances(self, context):
         """Reap any instances which are erroneously still running after
         having been deleted.

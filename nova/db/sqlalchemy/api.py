@@ -2503,76 +2503,66 @@ def block_device_mapping_destroy_by_instance_and_volume(context, instance_id,
 
 ###################
 
+def _security_group_get_query(context, session=None, deleted_visibility=None):
+    return model_query(context, models.SecurityGroup, session=session,
+                       deleted_visibility=deleted_visibility).\
+                   options(joinedload_all('rules')).\
+
 
 @require_context
 def security_group_get_all(context):
-    session = get_session()
-    return session.query(models.SecurityGroup).\
-                   filter_by(deleted=can_read_deleted(context)).\
-                   options(joinedload_all('rules')).\
-                   all()
+    return _security_group_get_query(context).all()
 
 
 @require_context
 def security_group_get(context, security_group_id, session=None):
-    if not session:
-        session = get_session()
-    if is_admin_context(context):
-        result = session.query(models.SecurityGroup).\
-                         filter_by(deleted=can_read_deleted(context),).\
+    query = _security_group_get_query(context, session=session).\
                          filter_by(id=security_group_id).\
-                         options(joinedload_all('rules')).\
-                         options(joinedload_all('instances')).\
-                         first()
-    else:
-        result = session.query(models.SecurityGroup).\
-                         filter_by(deleted=False).\
-                         filter_by(id=security_group_id).\
-                         filter_by(project_id=context.project_id).\
-                         options(joinedload_all('rules')).\
-                         options(joinedload_all('instances')).\
-                         first()
+                         options(joinedload_all('instances'))
+
+    if is_user_context(context):
+        query = query.filter_by(project_id=context.project_id)
+
+
+    result = query.first()
+
     if not result:
         raise exception.SecurityGroupNotFound(
                 security_group_id=security_group_id)
+
     return result
 
 
 @require_context
 def security_group_get_by_name(context, project_id, group_name):
-    session = get_session()
-    result = session.query(models.SecurityGroup).\
+    result = _security_group_get_query(
+                    context, deleted_visibility="not_visible").\
                         filter_by(project_id=project_id).\
                         filter_by(name=group_name).\
-                        filter_by(deleted=False).\
-                        options(joinedload_all('rules')).\
                         options(joinedload_all('instances')).\
                         first()
+
     if not result:
-        raise exception.SecurityGroupNotFoundForProject(project_id=project_id,
-                                                 security_group_id=group_name)
+        raise exception.SecurityGroupNotFoundForProject(
+                project_id=project_id, security_group_id=group_name)
+
     return result
 
 
 @require_context
 def security_group_get_by_project(context, project_id):
-    session = get_session()
-    return session.query(models.SecurityGroup).\
-                   filter_by(project_id=project_id).\
-                   filter_by(deleted=False).\
-                   options(joinedload_all('rules')).\
-                   all()
+    return _security_group_get_query(
+                    context, deleted_visibility="not_visible").\
+                        filter_by(project_id=project_id).\
+                        all()
 
 
 @require_context
 def security_group_get_by_instance(context, instance_id):
-    session = get_session()
-    return session.query(models.SecurityGroup).\
-                   filter_by(deleted=False).\
-                   options(joinedload_all('rules')).\
+    return _security_group_get_query(
+                    context, deleted_visibility="not_visible").\
                    join(models.SecurityGroup.instances).\
                    filter_by(id=instance_id).\
-                   filter_by(deleted=False).\
                    all()
 
 

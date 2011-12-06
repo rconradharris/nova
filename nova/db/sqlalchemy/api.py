@@ -1646,8 +1646,8 @@ def network_associate(context, project_id, force=False):
     with session.begin():
 
         def network_query(project_filter):
-            return session.query(models.Network).\
-                           filter_by(deleted=False).\
+            return model_query(context, models.Network, session=session,
+                              deleted_visibility="not_deleted").\
                            filter_by(project_id=project_filter).\
                            with_lockmode('update').\
                            first()
@@ -1675,41 +1675,34 @@ def network_associate(context, project_id, force=False):
 
 @require_admin_context
 def network_count(context):
-    session = get_session()
-    return session.query(models.Network).\
-                   filter_by(deleted=can_read_deleted(context)).\
+    return model_query(context, models.Network).count()
+
+
+
+@require_admin_context
+def _network_count_ips_query(context, network_id):
+    return model_query(context, models.FixedIp,
+                       deleted_visibility="not_visible").\
+                   filter_by(network_id=network_id).\
                    count()
 
 
 @require_admin_context
 def network_count_allocated_ips(context, network_id):
-    session = get_session()
-    return session.query(models.FixedIp).\
-                   filter_by(network_id=network_id).\
-                   filter_by(allocated=True).\
-                   filter_by(deleted=False).\
-                   count()
+    return _network_count_ips_query(context, network_id).\
+                    filter_by(allocated=True)
 
 
 @require_admin_context
 def network_count_available_ips(context, network_id):
-    session = get_session()
-    return session.query(models.FixedIp).\
-                   filter_by(network_id=network_id).\
-                   filter_by(allocated=False).\
-                   filter_by(reserved=False).\
-                   filter_by(deleted=False).\
-                   count()
+    return _network_count_ips_query(context, network_id).\
+                    filter_by(allocated=False)
 
 
 @require_admin_context
 def network_count_reserved_ips(context, network_id):
-    session = get_session()
-    return session.query(models.FixedIp).\
-                   filter_by(network_id=network_id).\
+    return _network_count_ips_query(context, network_id).\
                    filter_by(reserved=True).\
-                   filter_by(deleted=False).\
-                   count()
 
 
 @require_admin_context
@@ -1728,7 +1721,7 @@ def network_create_safe(context, values):
 def network_delete_safe(context, network_id):
     session = get_session()
     with session.begin():
-        network_ref = network_get(context, network_id=network_id, \
+        network_ref = network_get(context, network_id=network_id,
                                   session=session)
         session.delete(network_ref)
 
@@ -1749,21 +1742,14 @@ def network_disassociate_all(context):
 
 @require_context
 def network_get(context, network_id, session=None):
-    if not session:
-        session = get_session()
-    result = None
+    query = model_query(context, models.Network, session=session).\
+                         filter_by(id=network_id)
 
-    if is_admin_context(context):
-        result = session.query(models.Network).\
-                         filter_by(id=network_id).\
-                         filter_by(deleted=can_read_deleted(context)).\
-                         first()
-    elif is_user_context(context):
-        result = session.query(models.Network).\
-                         filter_by(project_id=context.project_id).\
-                         filter_by(id=network_id).\
-                         filter_by(deleted=False).\
-                         first()
+    if is_user_context(context):
+        query = query.filter_by(project_id=context.project_id)
+
+    result = query.first()
+
     if not result:
         raise exception.NetworkNotFound(network_id=network_id)
 
@@ -1772,23 +1758,25 @@ def network_get(context, network_id, session=None):
 
 @require_admin_context
 def network_get_all(context):
-    session = get_session()
-    result = session.query(models.Network).\
-                 filter_by(deleted=False).all()
+    result = model_query(context, models.Network,
+                         deleted_visibility="not_visible").all()
+
     if not result:
         raise exception.NoNetworksFound()
+
     return result
 
 
 @require_admin_context
 def network_get_all_by_uuids(context, network_uuids, project_id=None):
-    session = get_session()
     project_or_none = or_(models.Network.project_id == project_id,
-                              models.Network.project_id == None)
-    result = session.query(models.Network).\
+                          models.Network.project_id == None)
+    result = model_query(context, models.Network,
+                         deleted_visibility="not_visible")
                  filter(models.Network.uuid.in_(network_uuids)).\
                  filter(project_or_none).\
-                 filter_by(deleted=False).all()
+                 all()
+
     if not result:
         raise exception.NoNetworksFound()
 
@@ -1821,100 +1809,93 @@ def network_get_all_by_uuids(context, network_uuids, project_id=None):
 
 @require_admin_context
 def network_get_associated_fixed_ips(context, network_id):
-    session = get_session()
-    return session.query(models.FixedIp).\
+    # FIXME(sirp): since this returns fixed_ips, this would be better named
+    # fixed_ip_get_all_by_network.
+    return model_query(context, models.FixedIp,
+                       deleted_visibility="not_visible")
                    options(joinedload_all('instance')).\
                    filter_by(network_id=network_id).\
                    filter(models.FixedIp.instance_id != None).\
                    filter(models.FixedIp.virtual_interface_id != None).\
-                   filter_by(deleted=False).\
                    all()
 
 
 @require_admin_context
+def _network_get_query(context):
+    return model_query(context, models.Network,
+                       deleted_visibility="not_visible")
+
+
+@require_admin_context
 def network_get_by_bridge(context, bridge):
-    session = get_session()
-    result = session.query(models.Network).\
-                 filter_by(bridge=bridge).\
-                 filter_by(deleted=False).\
-                 first()
+    result = _network_get_query(context).filter_by(bridge=bridge).first()
 
     if not result:
         raise exception.NetworkNotFoundForBridge(bridge=bridge)
+
     return result
 
 
 @require_admin_context
 def network_get_by_uuid(context, uuid):
-    session = get_session()
-    result = session.query(models.Network).\
-                 filter_by(uuid=uuid).\
-                 filter_by(deleted=False).\
-                 first()
+    result = _network_get_query(context).filter_by(uuid=uuid).first()
 
     if not result:
         raise exception.NetworkNotFoundForUUID(uuid=uuid)
+
     return result
 
 
 @require_admin_context
 def network_get_by_cidr(context, cidr):
-    session = get_session()
-    result = session.query(models.Network).\
+    result = _network_get_query(context).\
                 filter(or_(models.Network.cidr == cidr,
                            models.Network.cidr_v6 == cidr)).\
-                filter_by(deleted=False).\
                 first()
 
     if not result:
         raise exception.NetworkNotFoundForCidr(cidr=cidr)
+
     return result
 
 
 @require_admin_context
-def network_get_by_instance(_context, instance_id):
+def network_get_by_instance(context, instance_id):
     # note this uses fixed IP to get to instance
     # only works for networks the instance has an IP from
-    session = get_session()
-    rv = session.query(models.Network).\
-                 filter_by(deleted=False).\
+    result = _network_get_query(context).\
                  join(models.Network.fixed_ips).\
                  filter_by(instance_id=instance_id).\
-                 filter_by(deleted=False).\
                  first()
-    if not rv:
+
+    if not result:
         raise exception.NetworkNotFoundForInstance(instance_id=instance_id)
-    return rv
+
+    return result
 
 
 @require_admin_context
-def network_get_all_by_instance(_context, instance_id):
-    session = get_session()
-    rv = session.query(models.Network).\
-                 filter_by(deleted=False).\
+def network_get_all_by_instance(context, instance_id):
+    result = _network_get_query(context).\
                  join(models.Network.fixed_ips).\
                  filter_by(instance_id=instance_id).\
-                 filter_by(deleted=False).\
                  all()
-    if not rv:
+
+    if not result:
         raise exception.NetworkNotFoundForInstance(instance_id=instance_id)
-    return rv
+
+    return result
 
 
 @require_admin_context
 def network_get_all_by_host(context, host):
-    session = get_session()
-    with session.begin():
-        # NOTE(vish): return networks that have host set
-        #             or that have a fixed ip with host set
-        host_filter = or_(models.Network.host == host,
-                          models.FixedIp.host == host)
-
-        return session.query(models.Network).\
-                       filter_by(deleted=False).\
+    # NOTE(vish): return networks that have host set
+    #             or that have a fixed ip with host set
+    host_filter = or_(models.Network.host == host,
+                      models.FixedIp.host == host)
+    return _network_get_query(context).\
                        join(models.Network.fixed_ips).\
                        filter(host_filter).\
-                       filter_by(deleted=False).\
                        all()
 
 
@@ -1922,11 +1903,11 @@ def network_get_all_by_host(context, host):
 def network_set_host(context, network_id, host_id):
     session = get_session()
     with session.begin():
-        network_ref = session.query(models.Network).\
+        network_ref = _network_get_query(context).\
                               filter_by(id=network_id).\
-                              filter_by(deleted=False).\
                               with_lockmode('update').\
                               first()
+
         if not network_ref:
             raise exception.NetworkNotFound(network_id=network_id)
 

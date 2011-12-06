@@ -3734,6 +3734,11 @@ def volume_type_extra_specs_update_or_create(context, volume_type_id,
 ####################
 
 
+def _vsa_get_query(context, session=None):
+    return model_query(context, models.VirtualStorageArray, session=session).\
+                         options(joinedload('vsa_instance_type'))
+
+
 @require_admin_context
 def vsa_create(context, values):
     """
@@ -3780,23 +3785,13 @@ def vsa_get(context, vsa_id, session=None):
     """
     Get Virtual Storage Array record by ID.
     """
-    if not session:
-        session = get_session()
-    result = None
+    query = _vsa_get_query(context, session=session).filter_by(id=vsa_id)
 
-    if is_admin_context(context):
-        result = session.query(models.VirtualStorageArray).\
-                         options(joinedload('vsa_instance_type')).\
-                         filter_by(id=vsa_id).\
-                         filter_by(deleted=can_read_deleted(context)).\
-                         first()
-    elif is_user_context(context):
-        result = session.query(models.VirtualStorageArray).\
-                         options(joinedload('vsa_instance_type')).\
-                         filter_by(project_id=context.project_id).\
-                         filter_by(id=vsa_id).\
-                         filter_by(deleted=False).\
-                         first()
+    if is_user_context(context):
+        query = query.filter_by(project_id=context.project_id)
+
+    result = query.first()
+
     if not result:
         raise exception.VirtualStorageArrayNotFound(id=vsa_id)
 
@@ -3808,11 +3803,7 @@ def vsa_get_all(context):
     """
     Get all Virtual Storage Array records.
     """
-    session = get_session()
-    return session.query(models.VirtualStorageArray).\
-                   options(joinedload('vsa_instance_type')).\
-                   filter_by(deleted=can_read_deleted(context)).\
-                   all()
+    return _vsa_get_query(context).all()
 
 
 @require_context
@@ -3821,13 +3812,7 @@ def vsa_get_all_by_project(context, project_id):
     Get all Virtual Storage Array records by project ID.
     """
     authorize_project_context(context, project_id)
-
-    session = get_session()
-    return session.query(models.VirtualStorageArray).\
-                   options(joinedload('vsa_instance_type')).\
-                   filter_by(project_id=project_id).\
-                   filter_by(deleted=can_read_deleted(context)).\
-                   all()
+    return _vsa_get_query(context).filter_by(project_id=project_id).all()
 
 
 ####################

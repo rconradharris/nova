@@ -2692,17 +2692,12 @@ def provider_fw_rule_create(context, rule):
 
 @require_admin_context
 def provider_fw_rule_get_all(context):
-    session = get_session()
-    return session.query(models.ProviderFirewallRule).\
-                   filter_by(deleted=can_read_deleted(context)).\
-                   all()
+    return model_query(context, models.ProviderFirewallRule).all()
 
 
 @require_admin_context
 def provider_fw_rule_get_all_by_cidr(context, cidr):
-    session = get_session()
-    return session.query(models.ProviderFirewallRule).\
-                   filter_by(deleted=can_read_deleted(context)).\
+    return model_query(context, models.ProviderFirewallRule).\
                    filter_by(cidr=cidr).\
                    all()
 

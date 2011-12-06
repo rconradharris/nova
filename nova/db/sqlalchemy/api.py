@@ -2854,11 +2854,8 @@ def project_add_member(context, project_id, user_id):
 
 
 def project_get(context, id, session=None):
-    if not session:
-        session = get_session()
-
-    result = session.query(models.Project).\
-                     filter_by(deleted=False).\
+    result = model_query(context, models.Project, session=session,
+                         deleted_visibility="not_visible")).\
                      filter_by(id=id).\
                      options(joinedload_all('members')).\
                      first()
@@ -2870,22 +2867,20 @@ def project_get(context, id, session=None):
 
 
 def project_get_all(context):
-    session = get_session()
-    return session.query(models.Project).\
-                   filter_by(deleted=can_read_deleted(context)).\
+    return model_query(context, models.Project).\
                    options(joinedload_all('members')).\
                    all()
 
 
 def project_get_by_user(context, user_id):
-    session = get_session()
-    user = session.query(models.User).\
-                   filter_by(deleted=can_read_deleted(context)).\
+    user = model_query(context, models.User).\
                    filter_by(id=user_id).\
                    options(joinedload_all('projects')).\
                    first()
+
     if not user:
         raise exception.UserNotFound(user_id=user_id)
+
     return user.projects
 
 
@@ -2925,15 +2920,17 @@ def project_get_networks(context, project_id, associate=True):
     # NOTE(tr3buchet): as before this function will associate
     # a project with a network if it doesn't have one and
     # associate is true
-    session = get_session()
-    result = session.query(models.Network).\
+    result = model_query(context, models.Network,
+                         deleted_visibility="not_visible")).\
                      filter_by(project_id=project_id).\
-                     filter_by(deleted=False).all()
+                     all()
 
     if not result:
         if not associate:
             return []
+
         return [network_associate(context, project_id)]
+
     return result
 
 

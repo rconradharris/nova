@@ -3272,12 +3272,14 @@ def zone_create(context, values):
     return zone
 
 
+def _zone_get_by_id_query(context, zone_id, session=None):
+    return model_query(context, models.Zone, session=session).\
+                       filter_by(id=zone_id)
+
+
 @require_admin_context
 def zone_update(context, zone_id, values):
-    session = get_session()
-    zone = session.query(models.Zone).filter_by(id=zone_id).first()
-    if not zone:
-        raise exception.ZoneNotFound(zone_id=zone_id)
+    zone = zone_get(context, zone_id)
     zone.update(values)
     zone.save(session=session)
     return zone
@@ -3287,24 +3289,24 @@ def zone_update(context, zone_id, values):
 def zone_delete(context, zone_id):
     session = get_session()
     with session.begin():
-        session.query(models.Zone).\
-                filter_by(id=zone_id).\
+        _zone_get_by_id_query(context, zone_id, session=session).\
                 delete()
 
 
 @require_admin_context
 def zone_get(context, zone_id):
-    session = get_session()
-    result = session.query(models.Zone).filter_by(id=zone_id).first()
+    result = _zone_get_by_id_query(context, zone_id).first()
+
     if not result:
         raise exception.ZoneNotFound(zone_id=zone_id)
+
     return result
 
 
 @require_admin_context
 def zone_get_all(context):
-    session = get_session()
-    return session.query(models.Zone).all()
+    return model_query(context, models.Zone,
+                       deleted_visibility="visible").all()
 
 
 ####################

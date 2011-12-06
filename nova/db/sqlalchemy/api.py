@@ -82,13 +82,6 @@ def authorize_user_context(context, user_id):
             raise exception.NotAuthorized()
 
 
-def can_read_deleted(context):
-    """Indicates if the context has access to deleted objects."""
-    if not context:
-        return False
-    return context.read_deleted
-
-
 def require_admin_context(f):
     """Decorator to require admin request context.
 

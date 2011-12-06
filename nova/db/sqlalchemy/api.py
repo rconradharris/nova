@@ -2625,64 +2625,40 @@ def security_group_destroy_all(context, session=None):
 ###################
 
 
+def _security_group_rule_get_query(context, session=session):
+    return model_query(context, models.SecurityGroupIngressRule,
+                       session=session)
+
 @require_context
 def security_group_rule_get(context, security_group_rule_id, session=None):
-    if not session:
-        session = get_session()
-    if is_admin_context(context):
-        result = session.query(models.SecurityGroupIngressRule).\
-                         filter_by(deleted=can_read_deleted(context)).\
+    result = _security_group_rule_get_query(context, session=session).\
                          filter_by(id=security_group_rule_id).\
                          first()
-    else:
-        # TODO(vish): Join to group and check for project_id
-        result = session.query(models.SecurityGroupIngressRule).\
-                         filter_by(deleted=False).\
-                         filter_by(id=security_group_rule_id).\
-                         first()
+
     if not result:
         raise exception.SecurityGroupNotFoundForRule(
                                                rule_id=security_group_rule_id)
+
     return result
 
 
 @require_context
 def security_group_rule_get_by_security_group(context, security_group_id,
                                               session=None):
-    if not session:
-        session = get_session()
-    if is_admin_context(context):
-        result = session.query(models.SecurityGroupIngressRule).\
-                         filter_by(deleted=can_read_deleted(context)).\
+    return _security_group_rule_get_query(context, session=session).\
                          filter_by(parent_group_id=security_group_id).\
                          options(joinedload_all('grantee_group.instances')).\
                          all()
-    else:
-        result = session.query(models.SecurityGroupIngressRule).\
-                         filter_by(deleted=False).\
-                         filter_by(parent_group_id=security_group_id).\
-                         options(joinedload_all('grantee_group.instances')).\
-                         all()
-    return result
 
 
 @require_context
 def security_group_rule_get_by_security_group_grantee(context,
                                                       security_group_id,
                                                       session=None):
-    if not session:
-        session = get_session()
-    if is_admin_context(context):
-        result = session.query(models.SecurityGroupIngressRule).\
-                         filter_by(deleted=can_read_deleted(context)).\
+
+    return _security_group_rule_get_query(context, session=session).\
                          filter_by(group_id=security_group_id).\
                          all()
-    else:
-        result = session.query(models.SecurityGroupIngressRule).\
-                         filter_by(deleted=False).\
-                         filter_by(group_id=security_group_id).\
-                         all()
-    return result
 
 
 @require_context

@@ -3312,30 +3312,28 @@ def zone_get_all(context):
 ####################
 
 
+def _instance_metadata_get_query(context, instance_id, session=None):
+    return model_query(context, models.InstanceMetadata, session=session,
+                       deleted_visibility="not_visible").\
+                    filter_by(instance_id=instance_id)
+
 @require_context
 @require_instance_exists
 def instance_metadata_get(context, instance_id):
-    session = get_session()
+    rows = _instance_metadata_get_query(context, instance_id).all()
 
-    meta_results = session.query(models.InstanceMetadata).\
-                    filter_by(instance_id=instance_id).\
-                    filter_by(deleted=False).\
-                    all()
+    result = {}
+    for row in rows:
+        result[row['key']] = row['value']
 
-    meta_dict = {}
-    for i in meta_results:
-        meta_dict[i['key']] = i['value']
-    return meta_dict
+    return result
 
 
 @require_context
 @require_instance_exists
 def instance_metadata_delete(context, instance_id, key):
-    session = get_session()
-    session.query(models.InstanceMetadata).\
-        filter_by(instance_id=instance_id).\
+    _instance_metadata_get_query(context, instance_id).\
         filter_by(key=key).\
-        filter_by(deleted=False).\
         update({'deleted': True,
                 'deleted_at': utils.utcnow(),
                 'updated_at': literal_column('updated_at')})
@@ -3344,10 +3342,7 @@ def instance_metadata_delete(context, instance_id, key):
 @require_context
 @require_instance_exists
 def instance_metadata_delete_all(context, instance_id):
-    session = get_session()
-    session.query(models.InstanceMetadata).\
-        filter_by(instance_id=instance_id).\
-        filter_by(deleted=False).\
+    _instance_metadata_get_query(context, instance_id).\
         update({'deleted': True,
                 'deleted_at': utils.utcnow(),
                 'updated_at': literal_column('updated_at')})
@@ -3356,19 +3351,16 @@ def instance_metadata_delete_all(context, instance_id):
 @require_context
 @require_instance_exists
 def instance_metadata_get_item(context, instance_id, key, session=None):
-    if not session:
-        session = get_session()
-
-    meta_result = session.query(models.InstanceMetadata).\
-                    filter_by(instance_id=instance_id).\
+    result = _instance_metadata_get_query(
+                            context, instance_id, session=session).\
                     filter_by(key=key).\
-                    filter_by(deleted=False).\
                     first()
 
-    if not meta_result:
+    if not result:
         raise exception.InstanceMetadataNotFound(metadata_key=key,
                                                  instance_id=instance_id)
-    return meta_result
+
+    return result
 
 
 @require_context

@@ -3587,64 +3587,66 @@ def volume_type_create(_context, values):
 
 
 @require_context
-def volume_type_get_all(context, inactive=False, filters={}):
+def volume_type_get_all(context, inactive=False, filters=None):
     """
     Returns a dict describing all volume_types with name as key.
     """
-    session = get_session()
-    if inactive:
-        vol_types = session.query(models.VolumeTypes).\
+    filters = filters or {}
+
+    deleted_visibility = "visible" if inactive else "not_visible"
+    rows = model_query(context, models.VolumeTypes,
+                       deleted_visibility=deleted_visibility).\
                         options(joinedload('extra_specs')).\
                         order_by("name").\
                         all()
-    else:
-        vol_types = session.query(models.VolumeTypes).\
-                        options(joinedload('extra_specs')).\
-                        filter_by(deleted=False).\
-                        order_by("name").\
-                        all()
-    vol_dict = {}
-    if vol_types:
-        for i in vol_types:
-            vol_dict[i['name']] = _dict_with_extra_specs(i)
-    return vol_dict
+
+    # TODO(sirp): this patern of converting rows to a result with extra_specs
+    # is repeated quite a bit, might be worth creating a method for it
+    result = {}
+    for row in rows:
+        result[row['name']] = _dict_with_extra_specs(row)
+
+    return result
 
 
 @require_context
 def volume_type_get(context, id):
     """Returns a dict describing specific volume_type"""
-    session = get_session()
-    vol_type = session.query(models.VolumeTypes).\
+    result = model_query(context, models.VolumeTypes,
+                         deleted_visibility="visible").\
                     options(joinedload('extra_specs')).\
                     filter_by(id=id).\
                     first()
 
-    if not vol_type:
+    if not result:
         raise exception.VolumeTypeNotFound(volume_type=id)
-    else:
-        return _dict_with_extra_specs(vol_type)
+
+    return _dict_with_extra_specs(result)
 
 
 @require_context
 def volume_type_get_by_name(context, name):
     """Returns a dict describing specific volume_type"""
-    session = get_session()
-    vol_type = session.query(models.VolumeTypes).\
+    result = model_query(context, models.VolumeTypes,
+                         deleted_visibility="visible").\
                     options(joinedload('extra_specs')).\
                     filter_by(name=name).\
                     first()
-    if not vol_type:
+
+    if not result:
         raise exception.VolumeTypeNotFoundByName(volume_type_name=name)
     else:
-        return _dict_with_extra_specs(vol_type)
+        return _dict_with_extra_specs(result)
 
 
 @require_admin_context
 def volume_type_destroy(context, name):
     """ Marks specific volume_type as deleted"""
-    session = get_session()
-    volume_type_ref = session.query(models.VolumeTypes).\
+    volume_type_ref = model_query(context, models.VolumeTypes,
+                                  deleted_visibility="visible").\
                                       filter_by(name=name)
+
+    # FIXME(sirp): we should be setting deleted_at and updated_at here
     records = volume_type_ref.update(dict(deleted=True))
     if records == 0:
         raise exception.VolumeTypeNotFoundByName(volume_type_name=name)
@@ -3657,8 +3659,8 @@ def volume_type_purge(context, name):
     """ Removes specific volume_type from DB
         Usually volume_type_destroy should be used
     """
-    session = get_session()
-    volume_type_ref = session.query(models.VolumeTypes).\
+    volume_type_ref = model_query(context, models.VolumeTypes,
+                                  deleted_visibility="visible").\
                                       filter_by(name=name)
     records = volume_type_ref.delete()
     if records == 0:

@@ -360,12 +360,8 @@ def service_update(context, service_id, values):
 
 @require_admin_context
 def compute_node_get(context, compute_id, session=None):
-    if not session:
-        session = get_session()
-
-    result = session.query(models.ComputeNode).\
+    result = model_query(context, models.ComputeNode, session=session).\
                      filter_by(id=compute_id).\
-                     filter_by(deleted=can_read_deleted(context)).\
                      first()
 
     if not result:
@@ -376,12 +372,8 @@ def compute_node_get(context, compute_id, session=None):
 
 @require_admin_context
 def compute_node_get_all(context, session=None):
-    if not session:
-        session = get_session()
-
-    return session.query(models.ComputeNode).\
-                    options(joinedload('service')).\
-                    filter_by(deleted=can_read_deleted(context))
+    return = model_query(context, models.ComputeNode, session=session).\
+                    options(joinedload('service'))
 
 
 @require_admin_context

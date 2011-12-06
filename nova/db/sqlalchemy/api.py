@@ -149,6 +149,23 @@ def require_volume_exists(f):
     return wrapper
 
 
+def model_query(context, model_class, session=None):
+    session = session or get_session()
+    query = session.query(model_class)
+
+    if context.deleted_visibility == 'not_visible':
+        query = query.filter_by(deleted=False)
+    elif context.deleted_visibility == 'visible':
+        pass  # omit the filter to include deleted and active
+    elif context.deleted_visibility == 'only_deleted':
+        query = query.filter_by(deleted=True)
+    else:
+        raise Exception("Unrecognized deleted_visibility value '%s'"
+                        % deleted_visibility)
+
+    return query
+
+
 ###################
 
 
@@ -167,15 +184,10 @@ def service_destroy(context, service_id):
 
 @require_admin_context
 def service_get(context, service_id, session=None):
-    if not session:
-        session = get_session()
-
-    result = session.query(models.Service).\
+    result = model_query(context, models.Service, session=session).\
                      options(joinedload('compute_node')).\
                      filter_by(id=service_id).\
-                     filter_by(deleted=can_read_deleted(context)).\
                      first()
-
     if not result:
         raise exception.ServiceNotFound(service_id=service_id)
 
@@ -184,9 +196,7 @@ def service_get(context, service_id, session=None):
 
 @require_admin_context
 def service_get_all(context, disabled=None):
-    session = get_session()
-    query = session.query(models.Service).\
-                   filter_by(deleted=can_read_deleted(context))
+    query = model_query(context, models.Service)
 
     if disabled is not None:
         query = query.filter_by(disabled=disabled)
@@ -1428,7 +1438,6 @@ def instance_get_all_by_user(context, user_id):
 @require_admin_context
 def instance_get_all_by_host(context, host):
     session = get_session()
-    read_deleted = can_read_deleted(context)
     return session.query(models.Instance).\
                    options(joinedload_all('fixed_ips.floating_ips')).\
                    options(joinedload('security_groups')).\
@@ -1436,7 +1445,7 @@ def instance_get_all_by_host(context, host):
                    options(joinedload('metadata')).\
                    options(joinedload('instance_type')).\
                    filter_by(host=host).\
-                   filter_by(deleted=read_deleted).\
+                   filter_by(deleted=can_read_deleted(context)).\
                    all()
 
 

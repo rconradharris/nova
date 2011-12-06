@@ -18,7 +18,7 @@
 #    under the License.
 
 """RequestContext: context for requests that persist through all of nova."""
-
+import copy
 import uuid
 
 from nova import local
@@ -32,16 +32,17 @@ class RequestContext(object):
 
     """
 
-    def __init__(self, user_id, project_id, is_admin=None, read_deleted=False,
-                 roles=None, remote_address=None, timestamp=None,
-                 request_id=None, auth_token=None, strategy='noauth'):
+    def __init__(self, user_id, project_id, is_admin=None,
+                 deleted_visibility="not_visible", roles=None,
+                 remote_address=None, timestamp=None, request_id=None,
+                 auth_token=None, strategy='noauth'):
         self.user_id = user_id
         self.project_id = project_id
         self.roles = roles or []
         self.is_admin = is_admin
         if self.is_admin is None:
             self.is_admin = 'admin' in [x.lower() for x in self.roles]
-        self.read_deleted = read_deleted
+        self.deleted_visibility = deleted_visibility
         self.remote_address = remote_address
         if not timestamp:
             timestamp = utils.utcnow()
@@ -59,7 +60,7 @@ class RequestContext(object):
         return {'user_id': self.user_id,
                 'project_id': self.project_id,
                 'is_admin': self.is_admin,
-                'read_deleted': self.read_deleted,
+                'deleted_visibility': self.deleted_visibility,
                 'roles': self.roles,
                 'remote_address': self.remote_address,
                 'timestamp': utils.strtime(self.timestamp),
@@ -71,20 +72,19 @@ class RequestContext(object):
     def from_dict(cls, values):
         return cls(**values)
 
-    def elevated(self, read_deleted=None):
+    def elevated(self, deleted_visibility=None):
         """Return a version of this context with admin flag set."""
-        rd = self.read_deleted if read_deleted is None else read_deleted
-        return RequestContext(user_id=self.user_id,
-                              project_id=self.project_id,
-                              is_admin=True,
-                              read_deleted=rd,
-                              roles=self.roles,
-                              remote_address=self.remote_address,
-                              timestamp=self.timestamp,
-                              request_id=self.request_id,
-                              auth_token=self.auth_token,
-                              strategy=self.strategy)
+        context = copy.copy(self)
+        context.is_admin = True
+
+        if deleted_visibility is not None:
+            context.deleted_visibility = deleted_visibility
+
+        return context
 
 
-def get_admin_context(read_deleted=False):
-    return RequestContext(None, None, True, read_deleted)
+def get_admin_context(deleted_visibility="not_visible"):
+    return RequestContext(user_id=None,
+                          project_id=None,
+                          is_admin=True,
+                          deleted_visibility=deleted_visibility)

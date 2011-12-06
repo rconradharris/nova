@@ -1564,12 +1564,14 @@ class CloudTestCase(test.TestCase):
 
         self.cloud.terminate_instances(self.context, [ec2_instance_id])
 
-        admin_ctxt = context.get_admin_context(read_deleted=False)
+        admin_ctxt = context.get_admin_context(
+                deleted_visibility="not_visible")
         vol = db.volume_get(admin_ctxt, vol1['id'])
         self.assertFalse(vol['deleted'])
         db.volume_destroy(self.context, vol1['id'])
 
-        admin_ctxt = context.get_admin_context(read_deleted=True)
+        admin_ctxt = context.get_admin_context(
+                deleted_visibility="only_deleted")
         vol = db.volume_get(admin_ctxt, vol2['id'])
         self.assertTrue(vol['deleted'])
 
@@ -1689,13 +1691,15 @@ class CloudTestCase(test.TestCase):
 
         self.cloud.terminate_instances(self.context, [ec2_instance_id])
 
-        admin_ctxt = context.get_admin_context(read_deleted=False)
+        admin_ctxt = context.get_admin_context(
+                deleted_visibility="not_visible")
         vol = db.volume_get(admin_ctxt, vol1_id)
         self._assert_volume_detached(vol)
         self.assertFalse(vol['deleted'])
         db.volume_destroy(self.context, vol1_id)
 
-        admin_ctxt = context.get_admin_context(read_deleted=True)
+        admin_ctxt = context.get_admin_context(
+                deleted_visibility="only_deleted")
         vol = db.volume_get(admin_ctxt, vol2_id)
         self.assertTrue(vol['deleted'])
 

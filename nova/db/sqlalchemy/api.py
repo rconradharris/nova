@@ -3011,11 +3011,11 @@ def console_pool_create(context, values):
 
 
 def console_pool_get(context, pool_id):
-    session = get_session()
-    result = session.query(models.ConsolePool).\
-                     filter_by(deleted=False).\
+    result = model_query(context, models.ConsolePool,
+                         deleted_visibility="not_visible").\
                      filter_by(id=pool_id).\
                      first()
+
     if not result:
         raise exception.ConsolePoolNotFound(pool_id=pool_id)
 
@@ -3024,27 +3024,28 @@ def console_pool_get(context, pool_id):
 
 def console_pool_get_by_host_type(context, compute_host, host,
                                   console_type):
-    session = get_session()
-    result = session.query(models.ConsolePool).\
+
+    result = model_query(context, models.ConsolePool,
+                         deleted_visibility="not_visible").\
                    filter_by(host=host).\
                    filter_by(console_type=console_type).\
                    filter_by(compute_host=compute_host).\
-                   filter_by(deleted=False).\
                    options(joinedload('consoles')).\
                    first()
+
     if not result:
-        raise exception.ConsolePoolNotFoundForHostType(host=host,
-                                                  console_type=console_type,
-                                                  compute_host=compute_host)
+        raise exception.ConsolePoolNotFoundForHostType(
+                host=host, console_type=console_type,
+                compute_host=compute_host)
+
     return result
 
 
 def console_pool_get_all_by_host_type(context, host, console_type):
-    session = get_session()
-    return session.query(models.ConsolePool).\
+    return model_query(context, models.ConsolePool,
+                       deleted_visibility="not_visible").\
                    filter_by(host=host).\
                    filter_by(console_type=console_type).\
-                   filter_by(deleted=False).\
                    options(joinedload('consoles')).\
                    all()
 
@@ -3059,51 +3060,57 @@ def console_create(context, values):
 def console_delete(context, console_id):
     session = get_session()
     with session.begin():
-        # consoles are meant to be transient. (mdragon)
+        # NOTE(mdragon): consoles are meant to be transient.
         session.query(models.Console).\
                 filter_by(id=console_id).\
                 delete()
 
 
 def console_get_by_pool_instance(context, pool_id, instance_id):
-    session = get_session()
-    result = session.query(models.Console).\
+    result = model_query(context, models.Console,
+                         deleted_visibility="visible").\
                    filter_by(pool_id=pool_id).\
                    filter_by(instance_id=instance_id).\
                    options(joinedload('pool')).\
                    first()
+
     if not result:
-        raise exception.ConsoleNotFoundInPoolForInstance(pool_id=pool_id,
-                                                 instance_id=instance_id)
+        raise exception.ConsoleNotFoundInPoolForInstance(
+                pool_id=pool_id, instance_id=instance_id)
+
     return result
 
 
 def console_get_all_by_instance(context, instance_id):
-    session = get_session()
-    results = session.query(models.Console).\
+    return model_query(context, models.Console,
+                       deleted_visibility="visible").\
                    filter_by(instance_id=instance_id).\
-                   options(joinedload('pool')).\
                    all()
-    return results
 
 
 def console_get(context, console_id, instance_id=None):
-    session = get_session()
-    query = session.query(models.Console).\
-                    filter_by(id=console_id)
-    if instance_id:
+    query = model_query(context, models.Console,
+                        deleted_visibility="visible").\
+                    filter_by(id=console_id).\
+                    options(joinedload('pool'))
+
+    if instance_id is not None:
         query = query.filter_by(instance_id=instance_id)
-    result = query.options(joinedload('pool')).first()
+
+
+    result = query.first()
+
     if not result:
         if instance_id:
-            raise exception.ConsoleNotFoundForInstance(console_id=console_id,
-                                                       instance_id=instance_id)
+            raise exception.ConsoleNotFoundForInstance(
+                    console_id=console_id, instance_id=instance_id)
         else:
             raise exception.ConsoleNotFound(console_id=console_id)
+
     return result
 
 
-    ##################
+##################
 
 
 @require_admin_context

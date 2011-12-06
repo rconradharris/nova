@@ -746,7 +746,7 @@ def fixed_ip_associate_pool(context, network_id, instance_id=None, host=None):
 
 
 @require_context
-def fixed_ip_create(_context, values):
+def fixed_ip_create(context, values):
     fixed_ip_ref = models.FixedIp()
     fixed_ip_ref.update(values)
     fixed_ip_ref.save()
@@ -754,7 +754,7 @@ def fixed_ip_create(_context, values):
 
 
 @require_context
-def fixed_ip_bulk_create(_context, ips):
+def fixed_ip_bulk_create(context, ips):
     session = get_session()
     with session.begin():
         for ip in ips:
@@ -775,7 +775,7 @@ def fixed_ip_disassociate(context, address):
 
 
 @require_admin_context
-def fixed_ip_disassociate_all_by_timeout(_context, host, time):
+def fixed_ip_disassociate_all_by_timeout(context, host, time):
     session = get_session()
     inner_q = model_query(context, models.Network.id, session=session,
                           deleted_visibility="visible").\
@@ -1934,7 +1934,7 @@ def network_update(context, network_id, values):
 ###################
 
 
-def queue_get_for(_context, topic, physical_node_id):
+def queue_get_for(context, topic, physical_node_id):
     # FIXME(ja): this should be servername?
     return "%s.%s" % (topic, physical_node_id)
 
@@ -1994,7 +1994,7 @@ def auth_token_update(context, token_hash, values):
 
 
 @require_admin_context
-def auth_token_create(_context, token):
+def auth_token_create(context, token):
     tk = models.AuthToken()
     tk.update(token)
     tk.save()
@@ -2742,7 +2742,7 @@ def user_get_by_access_key(context, access_key, session=None):
 
 
 @require_admin_context
-def user_create(_context, values):
+def user_create(context, values):
     user_ref = models.User()
     user_ref.update(values)
     user_ref.save()
@@ -2837,7 +2837,7 @@ def user_update(context, user_id, values):
 ###################
 
 
-def project_create(_context, values):
+def project_create(context, values):
     project_ref = models.Project()
     project_ref.update(values)
     project_ref.save()
@@ -3115,7 +3115,7 @@ def console_get(context, console_id, instance_id=None):
 
 
 @require_admin_context
-def instance_type_create(_context, values):
+def instance_type_create(context, values):
     """Create a new instance type. In order to pass in extra specs,
     the values dict should contain a 'extra_specs' key/value pair:
 
@@ -3566,7 +3566,7 @@ def instance_type_extra_specs_update_or_create(context, instance_type_id,
 
 
 @require_admin_context
-def volume_type_create(_context, values):
+def volume_type_create(context, values):
     """Create a new instance type. In order to pass in extra specs,
     the values dict should contain a 'extra_specs' key/value pair:
 

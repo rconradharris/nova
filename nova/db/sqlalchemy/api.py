@@ -2005,29 +2005,31 @@ def auth_token_create(_context, token):
 
 @require_context
 def quota_get(context, project_id, resource, session=None):
-    if not session:
-        session = get_session()
-    result = session.query(models.Quota).\
+    result = model_query(context, models.Quota, session=session,
+                         deleted_visibility="not_visible").\
                      filter_by(project_id=project_id).\
                      filter_by(resource=resource).\
-                     filter_by(deleted=False).\
                      first()
+
     if not result:
         raise exception.ProjectQuotaNotFound(project_id=project_id)
+
     return result
 
 
 @require_context
 def quota_get_all_by_project(context, project_id):
     authorize_project_context(context, project_id)
-    session = get_session()
-    result = {'project_id': project_id}
-    rows = session.query(models.Quota).\
+
+    rows = model_query(context, models.Quota,
+                       deleted_visibility="not_visible").\
                    filter_by(project_id=project_id).\
-                   filter_by(deleted=False).\
                    all()
+
+    result = {'project_id': project_id}
     for row in rows:
         result[row.resource] = row.hard_limit
+
     return result
 
 
@@ -2062,10 +2064,11 @@ def quota_destroy(context, project_id, resource):
 def quota_destroy_all_by_project(context, project_id):
     session = get_session()
     with session.begin():
-        quotas = session.query(models.Quota).\
+        quotas = model_query(context, models.Quota, session=session,
+                             deleted_visibility="not_visible").\
                          filter_by(project_id=project_id).\
-                         filter_by(deleted=False).\
                          all()
+
         for quota_ref in quotas:
             quota_ref.delete(session=session)
 

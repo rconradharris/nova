@@ -2962,24 +2962,29 @@ def migration_update(context, id, values):
 
 @require_admin_context
 def migration_get(context, id, session=None):
-    if not session:
-        session = get_session()
-    result = session.query(models.Migration).\
-                     filter_by(id=id).first()
+    result = model_query(context, models.Migration, session=session,
+                         deleted_visibility="visible").\
+                     filter_by(id=id).\
+                     first()
+
     if not result:
         raise exception.MigrationNotFound(migration_id=id)
+
     return result
 
 
 @require_admin_context
 def migration_get_by_instance_and_status(context, instance_uuid, status):
-    session = get_session()
-    result = session.query(models.Migration).\
+    result = model_query(context, models.Migration,
+                         deleted_visibility="visible").\
                      filter_by(instance_uuid=instance_uuid).\
-                     filter_by(status=status).first()
+                     filter_by(status=status).\
+                     first()
+
     if not result:
         raise exception.MigrationNotFoundByStatus(instance_id=instance_uuid,
                                                   status=status)
+
     return result
 
 
@@ -2988,14 +2993,11 @@ def migration_get_all_unconfirmed(context, confirm_window, session=None):
     confirm_window = datetime.datetime.utcnow() - datetime.timedelta(
             seconds=confirm_window)
 
-    if not session:
-        session = get_session()
-
-    results = session.query(models.Migration).\
+    return model_query(context, models.Migration, session=session,
+                       deleted_visibility="visible").\
             filter(models.Migration.updated_at <= confirm_window).\
-            filter_by(status="FINISHED").all()
-
-    return results
+            filter_by(status="FINISHED").\
+            all()
 
 
 ##################

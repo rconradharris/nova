@@ -3869,12 +3869,15 @@ def sm_backend_conf_create(context, values):
 
 @require_admin_context
 def sm_backend_conf_update(context, sm_backend_id, values):
-    session = get_session()
-    backend_conf = session.query(models.SMBackendConf).\
-                           filter_by(id=sm_backend_id).first()
+    backend_conf = model_query(context, models.SMBackendConf,
+                               deleted_visibility="visible").\
+                           filter_by(id=sm_backend_id).\
+                           first()
+
     if not backend_conf:
-        raise exception.NotFound(_("No backend config with id "\
-                                   "%(sm_backend_id)s") % locals())
+        raise exception.NotFound(
+                _("No backend config with id %(sm_backend_id)s") % locals())
+
     backend_conf.update(values)
     backend_conf.save(session=session)
     return backend_conf
@@ -3882,35 +3885,44 @@ def sm_backend_conf_update(context, sm_backend_id, values):
 
 @require_admin_context
 def sm_backend_conf_delete(context, sm_backend_id):
+    # FIXME(sirp): for consistency, shouldn't this just mark as deleted with
+    # `purge` actually deleting the record?
     session = get_session()
     with session.begin():
-        session.query(models.SMBackendConf).\
+        model_query(context, models.SMBackendConf, session=session,
+                    deleted_visibility="visible").\
                 filter_by(id=sm_backend_id).\
                 delete()
 
 
 @require_admin_context
 def sm_backend_conf_get(context, sm_backend_id):
-    session = get_session()
-    result = session.query(models.SMBackendConf).\
-                     filter_by(id=sm_backend_id).first()
+    result = model_query(context, models.SMBackendConf,
+                         deleted_visibility="visible").\
+                     filter_by(id=sm_backend_id).\
+                     first()
+
     if not result:
         raise exception.NotFound(_("No backend config with id "\
                                    "%(sm_backend_id)s") % locals())
+
     return result
 
 
 @require_admin_context
 def sm_backend_conf_get_by_sr(context, sr_uuid):
     session = get_session()
-    result = session.query(models.SMBackendConf).filter_by(sr_uuid=sr_uuid)
-    return result
+    # FIXME(sirp): shouldn't this have a `first()` qualifier attached?
+    return model_query(context, models.SMBackendConf,
+                       deleted_visibility="visible").\
+                    filter_by(sr_uuid=sr_uuid)
 
 
 @require_admin_context
 def sm_backend_conf_get_all(context):
-    session = get_session()
-    return session.query(models.SMBackendConf).all()
+    return model_query(context, models.SMBackendConf,
+                       deleted_visibility="visible").\
+                    all()
 
 
 ####################

@@ -3498,28 +3498,32 @@ def bw_usage_update(context,
 ####################
 
 
+def _instance_type_extra_specs_get_query(context, instance_type_id,
+                                         session=None):
+    return model_query(context, models.InstanceTypeExtraSpecs,
+                       session=session,
+                       deleted_visibility="not_visible").\
+                    filter_by(instance_type_id=instance_type_id)
+
+
 @require_context
 def instance_type_extra_specs_get(context, instance_type_id):
-    session = get_session()
-
-    spec_results = session.query(models.InstanceTypeExtraSpecs).\
-                    filter_by(instance_type_id=instance_type_id).\
-                    filter_by(deleted=False).\
+    rows = _instance_type_extra_specs_get_query(
+                            context, instance_type_id).\
                     all()
 
-    spec_dict = {}
-    for i in spec_results:
-        spec_dict[i['key']] = i['value']
-    return spec_dict
+    result = {}
+    for row in rows:
+        result[row['key']] = row['value']
+
+    return result
 
 
 @require_context
 def instance_type_extra_specs_delete(context, instance_type_id, key):
-    session = get_session()
-    session.query(models.InstanceTypeExtraSpecs).\
-        filter_by(instance_type_id=instance_type_id).\
+    _instance_type_extra_specs_get_query(
+                            context, instance_type_id).\
         filter_by(key=key).\
-        filter_by(deleted=False).\
         update({'deleted': True,
                 'deleted_at': utils.utcnow(),
                 'updated_at': literal_column('updated_at')})
@@ -3528,21 +3532,16 @@ def instance_type_extra_specs_delete(context, instance_type_id, key):
 @require_context
 def instance_type_extra_specs_get_item(context, instance_type_id, key,
                                        session=None):
-
-    if not session:
-        session = get_session()
-
-    spec_result = session.query(models.InstanceTypeExtraSpecs).\
-                    filter_by(instance_type_id=instance_type_id).\
+    result = _instance_type_extra_specs_get_query(
+                            context, instance_type_id, session=session).\
                     filter_by(key=key).\
-                    filter_by(deleted=False).\
                     first()
 
-    if not spec_result:
-        raise exception.\
-           InstanceTypeExtraSpecsNotFound(extra_specs_key=key,
-                                        instance_type_id=instance_type_id)
-    return spec_result
+    if not result:
+        raise exception.InstanceTypeExtraSpecsNotFound(
+                extra_specs_key=key, instance_type_id=instance_type_id)
+
+    return result
 
 
 @require_context

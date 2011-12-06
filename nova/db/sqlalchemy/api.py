@@ -1973,15 +1973,14 @@ def auth_token_destroy(context, token_id):
 
 @require_admin_context
 def auth_token_get(context, token_hash, session=None):
-    if session is None:
-        session = get_session()
-    tk = session.query(models.AuthToken).\
+    result = model_query(context, models.AuthToken, session=session).\
                   filter_by(token_hash=token_hash).\
-                  filter_by(deleted=can_read_deleted(context)).\
                   first()
-    if not tk:
+
+    if not result:
         raise exception.AuthTokenNotFound(token=token_hash)
-    return tk
+
+    return result
 
 
 @require_admin_context

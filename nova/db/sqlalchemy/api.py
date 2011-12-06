@@ -1678,31 +1678,32 @@ def network_count(context):
     return model_query(context, models.Network).count()
 
 
-
 @require_admin_context
-def _network_count_ips_query(context, network_id):
+def _network_ips_query(context, network_id):
     return model_query(context, models.FixedIp,
                        deleted_visibility="not_visible").\
-                   filter_by(network_id=network_id).\
-                   count()
+                   filter_by(network_id=network_id)
 
 
 @require_admin_context
 def network_count_allocated_ips(context, network_id):
-    return _network_count_ips_query(context, network_id).\
-                    filter_by(allocated=True)
+    return _network_ips_query(context, network_id).\
+                    filter_by(allocated=True).\
+                    count()
 
 
 @require_admin_context
 def network_count_available_ips(context, network_id):
-    return _network_count_ips_query(context, network_id).\
-                    filter_by(allocated=False)
+    return _network_ips_query(context, network_id).\
+                    filter_by(allocated=False).\
+                    count()
 
 
 @require_admin_context
 def network_count_reserved_ips(context, network_id):
-    return _network_count_ips_query(context, network_id).\
+    return _network_ips_query(context, network_id).\
                    filter_by(reserved=True).\
+                   count()
 
 
 @require_admin_context

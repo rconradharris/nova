@@ -950,17 +950,20 @@ def virtual_interface_update(context, vif_id, values):
 
 
 @require_context
+def _virtual_interface_query(context,  session=None):
+    return model_query(context, models.VirtualInterfaces, session=session,
+                       deleted_visibility="visible").\
+                      options(joinedload('fixed_ips'))
+
+
+@require_context
 def virtual_interface_get(context, vif_id, session=None):
     """Gets a virtual interface from the table.
 
     :param vif_id: = id of the virtual interface
     """
-    if not session:
-        session = get_session()
-
-    vif_ref = session.query(models.VirtualInterface).\
+    vif_ref = _virtual_interface_query(context, session=session).\
                       filter_by(id=vif_id).\
-                      options(joinedload('fixed_ips')).\
                       first()
     return vif_ref
 
@@ -971,10 +974,8 @@ def virtual_interface_get_by_address(context, address):
 
     :param address: = the address of the interface you're looking to get
     """
-    session = get_session()
-    vif_ref = session.query(models.VirtualInterface).\
+    vif_ref = _virtual_interface_query(context).\
                       filter_by(address=address).\
-                      options(joinedload('fixed_ips')).\
                       first()
     return vif_ref
 
@@ -985,10 +986,8 @@ def virtual_interface_get_by_uuid(context, vif_uuid):
 
     :param vif_uuid: the uuid of the interface you're looking to get
     """
-    session = get_session()
-    vif_ref = session.query(models.VirtualInterface).\
+    vif_ref = _virtual_interface_query(context).\
                       filter_by(uuid=vif_uuid).\
-                      options(joinedload('fixed_ips')).\
                       first()
     return vif_ref
 
@@ -999,10 +998,8 @@ def virtual_interface_get_by_fixed_ip(context, fixed_ip_id):
 
     :param fixed_ip_id: = id of the fixed_ip
     """
-    session = get_session()
-    vif_ref = session.query(models.VirtualInterface).\
+    vif_ref = _virtual_interface_query(context).\
                       filter_by(fixed_ip_id=fixed_ip_id).\
-                      options(joinedload('fixed_ips')).\
                       first()
     return vif_ref
 
@@ -1014,10 +1011,8 @@ def virtual_interface_get_by_instance(context, instance_id):
 
     :param instance_id: = id of the instance to retrieve vifs for
     """
-    session = get_session()
-    vif_refs = session.query(models.VirtualInterface).\
+    vif_refs = _virtual_interface_query(context).\
                        filter_by(instance_id=instance_id).\
-                       options(joinedload('fixed_ips')).\
                        all()
     return vif_refs
 
@@ -1026,11 +1021,9 @@ def virtual_interface_get_by_instance(context, instance_id):
 def virtual_interface_get_by_instance_and_network(context, instance_id,
                                                            network_id):
     """Gets virtual interface for instance that's associated with network."""
-    session = get_session()
-    vif_ref = session.query(models.VirtualInterface).\
+    vif_ref = _virtual_interface_query(context).\
                       filter_by(instance_id=instance_id).\
                       filter_by(network_id=network_id).\
-                      options(joinedload('fixed_ips')).\
                       first()
     return vif_ref
 
@@ -1041,10 +1034,8 @@ def virtual_interface_get_by_network(context, network_id):
 
     :param network_id: = network to retrieve vifs for
     """
-    session = get_session()
-    vif_refs = session.query(models.VirtualInterface).\
+    vif_refs = _virtual_interface_query(context).\
                        filter_by(network_id=network_id).\
-                       options(joinedload('fixed_ips')).\
                        all()
     return vif_refs
 
@@ -1076,10 +1067,7 @@ def virtual_interface_delete_by_instance(context, instance_id):
 @require_context
 def virtual_interface_get_all(context):
     """Get all vifs"""
-    session = get_session()
-    vif_refs = session.query(models.VirtualInterface).\
-                       options(joinedload('fixed_ips')).\
-                       all()
+    vif_refs = _virtual_interface_query(context).all()
     return vif_refs
 
 

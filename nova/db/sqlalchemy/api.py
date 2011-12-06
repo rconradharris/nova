@@ -1107,12 +1107,12 @@ def instance_create(context, values):
 
 @require_admin_context
 def instance_data_get_for_project(context, project_id):
-    session = get_session()
-    result = session.query(func.count(models.Instance.id),
-                           func.sum(models.Instance.vcpus),
-                           func.sum(models.Instance.memory_mb)).\
+    result = model_query(context,
+                         func.count(models.Instance.id),
+                         func.sum(models.Instance.vcpus),
+                         func.sum(models.Instance.memory_mb),
+                         deleted_visibility="not_visible").\
                      filter_by(project_id=project_id).\
-                     filter_by(deleted=False).\
                      first()
     # NOTE(vish): convert None to 0
     return (result[0] or 0, result[1] or 0, result[2] or 0)
@@ -1186,10 +1186,7 @@ def instance_get(context, instance_id, session=None):
 
 @require_context
 def _build_instance_get(context, session=None):
-    if not session:
-        session = get_session()
-
-    partial = session.query(models.Instance).\
+    partial = model_query(context, models.Instance, session=session).\
             options(joinedload_all('fixed_ips.floating_ips')).\
             options(joinedload_all('fixed_ips.network')).\
             options(joinedload_all('fixed_ips.virtual_interface')).\
@@ -1198,24 +1195,20 @@ def _build_instance_get(context, session=None):
             options(joinedload('metadata')).\
             options(joinedload('instance_type'))
 
-    if is_admin_context(context):
-        partial = partial.filter_by(deleted=can_read_deleted(context))
-    elif is_user_context(context):
-        partial = partial.filter_by(project_id=context.project_id).\
-                        filter_by(deleted=False)
+    if is_user_context(context):
+        partial = partial.filter_by(project_id=context.project_id)
+
     return partial
 
 
 @require_admin_context
 def instance_get_all(context):
-    session = get_session()
-    return session.query(models.Instance).\
+    return model_query(context, models.Instance).\
                    options(joinedload_all('fixed_ips.floating_ips')).\
                    options(joinedload('security_groups')).\
                    options(joinedload_all('fixed_ips.network')).\
                    options(joinedload('metadata')).\
                    options(joinedload('instance_type')).\
-                   filter_by(deleted=can_read_deleted(context)).\
                    all()
 
 
@@ -1376,83 +1369,49 @@ def instance_get_active_by_window_joined(context, begin, end=None,
 
 
 @require_admin_context
-def instance_get_all_by_user(context, user_id):
-    session = get_session()
-    return session.query(models.Instance).\
+def _instance_get_all_query(context):
+    return model_query(context, models.Instance).\
                    options(joinedload_all('fixed_ips.floating_ips')).\
                    options(joinedload('security_groups')).\
                    options(joinedload_all('fixed_ips.network')).\
                    options(joinedload('metadata')).\
-                   options(joinedload('instance_type')).\
-                   filter_by(deleted=can_read_deleted(context)).\
-                   filter_by(user_id=user_id).\
-                   all()
+                   options(joinedload('instance_type'))
+
+
+@require_admin_context
+def instance_get_all_by_user(context, user_id):
+    return _instance_get_all_query(context).filter_by(user_id=user_id).all()
 
 
 @require_admin_context
 def instance_get_all_by_host(context, host):
-    session = get_session()
-    return session.query(models.Instance).\
-                   options(joinedload_all('fixed_ips.floating_ips')).\
-                   options(joinedload('security_groups')).\
-                   options(joinedload_all('fixed_ips.network')).\
-                   options(joinedload('metadata')).\
-                   options(joinedload('instance_type')).\
-                   filter_by(host=host).\
-                   filter_by(deleted=can_read_deleted(context)).\
-                   all()
+    return _instance_get_all_query(context).filter_by(host=host).all()
 
 
 @require_context
 def instance_get_all_by_project(context, project_id):
     authorize_project_context(context, project_id)
-
-    session = get_session()
-    return session.query(models.Instance).\
-                   options(joinedload_all('fixed_ips.floating_ips')).\
-                   options(joinedload('security_groups')).\
-                   options(joinedload_all('fixed_ips.network')).\
-                   options(joinedload('metadata')).\
-                   options(joinedload('instance_type')).\
-                   filter_by(project_id=project_id).\
-                   filter_by(deleted=can_read_deleted(context)).\
-                   all()
+    return _instance_get_all_query(context).\
+                    filter_by(project_id=project_id).\
+                    all()
 
 
 @require_context
 def instance_get_all_by_reservation(context, reservation_id):
-    session = get_session()
-    query = session.query(models.Instance).\
-                    filter_by(reservation_id=reservation_id).\
-                    options(joinedload_all('fixed_ips.floating_ips')).\
-                    options(joinedload('security_groups')).\
-                    options(joinedload_all('fixed_ips.network')).\
-                    options(joinedload('metadata')).\
-                    options(joinedload('instance_type'))
+    query = _instance_get_all_query(context).\
+                    filter_by(reservation_id=reservation_id)
 
-    if is_admin_context(context):
-        return query.\
-                filter_by(deleted=can_read_deleted(context)).\
-                all()
-    elif is_user_context(context):
-        return query.\
-                filter_by(project_id=context.project_id).\
-                filter_by(deleted=False).\
-                all()
+    if is_user_context(context):
+        query = query.filter_by(project_id=context.project_id)
+
+    return query.all()
 
 
 @require_admin_context
 def instance_get_project_vpn(context, project_id):
-    session = get_session()
-    return session.query(models.Instance).\
-                   options(joinedload_all('fixed_ips.floating_ips')).\
-                   options(joinedload('security_groups')).\
-                   options(joinedload_all('fixed_ips.network')).\
-                   options(joinedload('metadata')).\
-                   options(joinedload('instance_type')).\
+    return _instance_get_all_query(context).\
                    filter_by(project_id=project_id).\
                    filter_by(image_ref=str(FLAGS.vpn_image_id)).\
-                   filter_by(deleted=can_read_deleted(context)).\
                    first()
 
 
@@ -1593,8 +1552,8 @@ def instance_get_actions(context, instance_id):
         instance_id = instance.id
 
     return session.query(models.InstanceActions).\
-        filter_by(instance_id=instance_id).\
-       all()
+                        filter_by(instance_id=instance_id).\
+                        all()
 
 
 @require_context

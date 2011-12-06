@@ -1943,9 +1943,7 @@ def queue_get_for(_context, topic, physical_node_id):
 
 @require_admin_context
 def iscsi_target_count_by_host(context, host):
-    session = get_session()
-    return session.query(models.IscsiTarget).\
-                   filter_by(deleted=can_read_deleted(context)).\
+    return model_query(context, models.IscsiTarget).\
                    filter_by(host=host).\
                    count()
 

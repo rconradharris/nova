@@ -3672,28 +3672,27 @@ def volume_type_purge(context, name):
 ####################
 
 
+def _volume_type_extra_specs_query(context, volume_type_id, session=None):
+    return model_query(context, models.VolumeTypeExtraSpecs, session=session,
+                       deleted_visibility="not_visible").\
+                    filter_by(volume_type_id=volume_type_id)
+
 @require_context
 def volume_type_extra_specs_get(context, volume_type_id):
-    session = get_session()
-
-    spec_results = session.query(models.VolumeTypeExtraSpecs).\
-                    filter_by(volume_type_id=volume_type_id).\
-                    filter_by(deleted=False).\
+    rows = _volume_type_extra_specs_query(context, volume_type_id).\
                     all()
 
-    spec_dict = {}
-    for i in spec_results:
-        spec_dict[i['key']] = i['value']
-    return spec_dict
+    result = {}
+    for row in rows:
+        result[row['key']] = row['value']
+
+    return result
 
 
 @require_context
 def volume_type_extra_specs_delete(context, volume_type_id, key):
-    session = get_session()
-    session.query(models.VolumeTypeExtraSpecs).\
-        filter_by(volume_type_id=volume_type_id).\
+    _volume_type_extra_specs_query(context, volume_type_id).\
         filter_by(key=key).\
-        filter_by(deleted=False).\
         update({'deleted': True,
                 'deleted_at': utils.utcnow(),
                 'updated_at': literal_column('updated_at')})
@@ -3701,22 +3700,17 @@ def volume_type_extra_specs_delete(context, volume_type_id, key):
 
 @require_context
 def volume_type_extra_specs_get_item(context, volume_type_id, key,
-                                       session=None):
-
-    if not session:
-        session = get_session()
-
-    spec_result = session.query(models.VolumeTypeExtraSpecs).\
-                    filter_by(volume_type_id=volume_type_id).\
+                                     session=None):
+    result = _volume_type_extra_specs_query(
+                                    context, volume_type_id, session=session).\
                     filter_by(key=key).\
-                    filter_by(deleted=False).\
                     first()
 
-    if not spec_result:
-        raise exception.\
-           VolumeTypeExtraSpecsNotFound(extra_specs_key=key,
-                                        volume_type_id=volume_type_id)
-    return spec_result
+    if not result:
+        raise exception.VolumeTypeExtraSpecsNotFound(
+                   extra_specs_key=key, volume_type_id=volume_type_id)
+
+    return result
 
 
 @require_context
@@ -3737,7 +3731,7 @@ def volume_type_extra_specs_update_or_create(context, volume_type_id,
     return specs
 
 
-    ####################
+####################
 
 
 @require_admin_context

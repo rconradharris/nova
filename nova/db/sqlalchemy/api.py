@@ -2266,31 +2266,28 @@ def volume_update(context, volume_id, values):
 
 ####################
 
+def _volume_metadata_get_query(context, volume_id, session=None):
+    return model_query(context, models.VolumeMetadata,
+                       session=session,
+                       deleted_visibility="not_visibile").\
+                    filter_by(volume_id=volume_id)
 
 @require_context
 @require_volume_exists
 def volume_metadata_get(context, volume_id):
-    session = get_session()
+    rows = _volume_metadata_get_query(context, volume_id).all()
+    result = {}
+    for row in rows:
+        result[row['key']] = row['value']
 
-    meta_results = session.query(models.VolumeMetadata).\
-                    filter_by(volume_id=volume_id).\
-                    filter_by(deleted=False).\
-                    all()
-
-    meta_dict = {}
-    for i in meta_results:
-        meta_dict[i['key']] = i['value']
-    return meta_dict
+    return result
 
 
 @require_context
 @require_volume_exists
 def volume_metadata_delete(context, volume_id, key):
-    session = get_session()
-    session.query(models.VolumeMetadata).\
-        filter_by(volume_id=volume_id).\
+    _volume_metadata_get_query(context, volume_id).\
         filter_by(key=key).\
-        filter_by(deleted=False).\
         update({'deleted': True,
                 'deleted_at': utils.utcnow(),
                 'updated_at': literal_column('updated_at')})
@@ -2299,10 +2296,7 @@ def volume_metadata_delete(context, volume_id, key):
 @require_context
 @require_volume_exists
 def volume_metadata_delete_all(context, volume_id):
-    session = get_session()
-    session.query(models.VolumeMetadata).\
-        filter_by(volume_id=volume_id).\
-        filter_by(deleted=False).\
+    _volume_metadata_get_query(context, volume_id).\
         update({'deleted': True,
                 'deleted_at': utils.utcnow(),
                 'updated_at': literal_column('updated_at')})
@@ -2311,19 +2305,14 @@ def volume_metadata_delete_all(context, volume_id):
 @require_context
 @require_volume_exists
 def volume_metadata_get_item(context, volume_id, key, session=None):
-    if not session:
-        session = get_session()
-
-    meta_result = session.query(models.VolumeMetadata).\
-                    filter_by(volume_id=volume_id).\
+    result = _volume_metadata_get_query(context, volume_id, session=session).\
                     filter_by(key=key).\
-                    filter_by(deleted=False).\
                     first()
 
-    if not meta_result:
+    if not result:
         raise exception.VolumeMetadataNotFound(metadata_key=key,
                                                volume_id=volume_id)
-    return meta_result
+    return result
 
 
 @require_context

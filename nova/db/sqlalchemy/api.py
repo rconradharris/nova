@@ -3159,26 +3159,29 @@ def _dict_with_extra_specs(inst_type_query):
     return inst_type_dict
 
 
+def _instance_type_get_query(context, session=None, deleted_visibility=None):
+    return model_query(context, models.InstanceTypes, session=session,
+                       deleted_visibility=deleted_visibility).\
+                     .options(joinedload('extra_specs'))
+
+
 @require_context
 def instance_type_get_all(context, inactive=False, filters=None):
     """
     Returns all instance types.
     """
     filters = filters or {}
-    session = get_session()
-    partial = session.query(models.InstanceTypes)\
-                     .options(joinedload('extra_specs'))
-    if not inactive:
-        partial = partial.filter_by(deleted=False)
+    deleted_visibility = "visible" if inactive else "not_visible"
+    query = _instance_type_get_query(context, deleted_visibility=deleted_visibility)
 
     if 'min_memory_mb' in filters:
-        partial = partial.filter(
+        query = query.filter(
                 models.InstanceTypes.memory_mb >= filters['min_memory_mb'])
     if 'min_local_gb' in filters:
-        partial = partial.filter(
+        query = query.filter(
                 models.InstanceTypes.local_gb >= filters['min_local_gb'])
 
-    inst_types = partial.order_by("name").all()
+    inst_types = query.order_by("name").all()
 
     return [_dict_with_extra_specs(i) for i in inst_types]
 
@@ -3186,53 +3189,55 @@ def instance_type_get_all(context, inactive=False, filters=None):
 @require_context
 def instance_type_get(context, id):
     """Returns a dict describing specific instance_type"""
-    session = get_session()
-    inst_type = session.query(models.InstanceTypes).\
-                    options(joinedload('extra_specs')).\
+    result = _instance_type_get_query(
+                        context, deleted_visibility="visible").\
                     filter_by(id=id).\
                     first()
 
-    if not inst_type:
+    if not result:
         raise exception.InstanceTypeNotFound(instance_type_id=id)
-    else:
-        return _dict_with_extra_specs(inst_type)
+
+    return _dict_with_extra_specs(result)
 
 
 @require_context
 def instance_type_get_by_name(context, name):
     """Returns a dict describing specific instance_type"""
-    session = get_session()
-    inst_type = session.query(models.InstanceTypes).\
-                    options(joinedload('extra_specs')).\
+    result = _instance_type_get_query(
+                        context, deleted_visibility="visible").\
                     filter_by(name=name).\
                     first()
-    if not inst_type:
+
+    if not result:
         raise exception.InstanceTypeNotFoundByName(instance_type_name=name)
-    else:
-        return _dict_with_extra_specs(inst_type)
+
+    return _dict_with_extra_specs(result)
 
 
 @require_context
 def instance_type_get_by_flavor_id(context, flavor_id):
     """Returns a dict describing specific flavor_id"""
-    session = get_session()
-    inst_type = session.query(models.InstanceTypes).\
-                                    options(joinedload('extra_specs')).\
-                                    filter_by(flavorid=flavor_id).\
-                                    first()
-    if not inst_type:
+    result = _instance_type_get_query(
+                        context, deleted_visibility="visible").\
+                    filter_by(flavorid=flavor_id).\
+                    first()
+
+    if not result:
         raise exception.FlavorNotFound(flavor_id=flavor_id)
-    else:
-        return _dict_with_extra_specs(inst_type)
+
+    return _dict_with_extra_specs(result)
 
 
 @require_admin_context
 def instance_type_destroy(context, name):
     """ Marks specific instance_type as deleted"""
-    session = get_session()
-    instance_type_ref = session.query(models.InstanceTypes).\
-                                      filter_by(name=name)
+    instance_type_ref = model_query(context, models.InstanceTypes,
+                                    deleted_visibility="visible").\
+                      filter_by(name=name)
+
+    # FIXME(sirp): this should update deleted_at and updated_at as well
     records = instance_type_ref.update(dict(deleted=True))
+
     if records == 0:
         raise exception.InstanceTypeNotFoundByName(instance_type_name=name)
     else:
@@ -3244,10 +3249,12 @@ def instance_type_purge(context, name):
     """ Removes specific instance_type from DB
         Usually instance_type_destroy should be used
     """
-    session = get_session()
-    instance_type_ref = session.query(models.InstanceTypes).\
-                                      filter_by(name=name)
+    instance_type_ref = model_query(context, models.InstanceTypes,
+                                    deleted_visibility="visible").\
+                      filter_by(name=name)
+
     records = instance_type_ref.delete()
+
     if records == 0:
         raise exception.InstanceTypeNotFoundByName(instance_type_name=name)
     else:

@@ -149,20 +149,24 @@ def require_volume_exists(f):
     return wrapper
 
 
-def model_query(context, model_class, session=None):
-    session = session or get_session()
-    query = session.query(model_class)
+def model_query(context, *args, **kwargs):
+    session = kwargs.get('session', get_session())
+    deleted_visibility = kwargs.get('deleted_visibility')
 
-    if context.deleted_visibility == 'not_visible':
+    query = session.query(*args)
+
+    if deleted_visibility is None:
+        deleted_visibility = context.deleted_visibility
+
+    if deleted_visibility == 'not_visible':
         query = query.filter_by(deleted=False)
-    elif context.deleted_visibility == 'visible':
+    elif deleted_visibility == 'visible':
         pass  # omit the filter to include deleted and active
-    elif context.deleted_visibility == 'only_deleted':
+    elif deleted_visibility == 'only_deleted':
         query = query.filter_by(deleted=True)
     else:
         raise Exception("Unrecognized deleted_visibility value '%s'"
                         % deleted_visibility)
-
     return query
 
 
@@ -206,45 +210,38 @@ def service_get_all(context, disabled=None):
 
 @require_admin_context
 def service_get_all_by_topic(context, topic):
-    session = get_session()
-    return session.query(models.Service).\
-                   filter_by(deleted=False).\
-                   filter_by(disabled=False).\
-                   filter_by(topic=topic).\
-                   all()
+    query = model_query(context, models.Service,
+                        deleted_visibility="not_visible")
+    return query.filter_by(disabled=False).\
+                 filter_by(topic=topic).\
+                 all()
 
 
 @require_admin_context
 def service_get_by_host_and_topic(context, host, topic):
-    session = get_session()
-    return session.query(models.Service).\
-                   filter_by(deleted=False).\
-                   filter_by(disabled=False).\
-                   filter_by(host=host).\
-                   filter_by(topic=topic).\
-                   first()
+    query = model_query(context, models.Service,
+                        deleted_visibility="not_visible")
+    return query.filter_by(disabled=False).\
+                 filter_by(host=host).\
+                 filter_by(topic=topic).\
+                 first()
 
 
 @require_admin_context
 def service_get_all_by_host(context, host):
-    session = get_session()
-    return session.query(models.Service).\
-                   filter_by(deleted=False).\
-                   filter_by(host=host).\
-                   all()
+    query = model_query(context, models.Service,
+                        deleted_visibility="not_visible")
+    return query.filter_by(host=host).all()
 
 
 @require_admin_context
 def service_get_all_compute_by_host(context, host):
-    topic = 'compute'
-    session = get_session()
-    result = session.query(models.Service).\
-                  options(joinedload('compute_node')).\
-                  filter_by(deleted=False).\
-                  filter_by(host=host).\
-                  filter_by(topic=topic).\
-                  all()
-
+    query = model_query(context, models.Service,
+                        deleted_visibility="not_visible")
+    result = query.options(joinedload('compute_node')).\
+                   filter_by(host=host).\
+                   filter_by(topic="compute").\
+                   all()
     if not result:
         raise exception.ComputeHostNotFound(host=host)
 
@@ -254,13 +251,13 @@ def service_get_all_compute_by_host(context, host):
 @require_admin_context
 def _service_get_all_topic_subquery(context, session, topic, subq, label):
     sort_value = getattr(subq.c, label)
-    return session.query(models.Service, func.coalesce(sort_value, 0)).\
-                   filter_by(topic=topic).\
-                   filter_by(deleted=False).\
-                   filter_by(disabled=False).\
-                   outerjoin((subq, models.Service.host == subq.c.host)).\
-                   order_by(sort_value).\
-                   all()
+    query = model_query(context, models.Service, func.coalesce(sort_value, 0),
+                        deleted_visibility="not_visible", session=session)
+    return query.filter_by(topic=topic).\
+                 filter_by(disabled=False).\
+                 outerjoin((subq, models.Service.host == subq.c.host)).\
+                 order_by(sort_value).\
+                 all()
 
 
 @require_admin_context
@@ -276,9 +273,10 @@ def service_get_all_compute_sorted(context):
         #             ON services.host = inst_cores.host
         topic = 'compute'
         label = 'instance_cores'
-        subq = session.query(models.Instance.host,
-                             func.sum(models.Instance.vcpus).label(label)).\
-                       filter_by(deleted=False).\
+        subq = model_query(context, models.Instance.host,
+                           func.sum(models.Instance.vcpus).label(label),
+                           session=session,
+                           deleted_visibility="not_visible").\
                        group_by(models.Instance.host).\
                        subquery()
         return _service_get_all_topic_subquery(context,
@@ -294,9 +292,10 @@ def service_get_all_network_sorted(context):
     with session.begin():
         topic = 'network'
         label = 'network_count'
-        subq = session.query(models.Network.host,
-                             func.count(models.Network.id).label(label)).\
-                       filter_by(deleted=False).\
+        subq = model_query(context, models.Network.host,
+                           func.count(models.Network.id).label(label),
+                           session=session,
+                           deleted_visibility="not_visible").\
                        group_by(models.Network.host).\
                        subquery()
         return _service_get_all_topic_subquery(context,
@@ -312,9 +311,10 @@ def service_get_all_volume_sorted(context):
     with session.begin():
         topic = 'volume'
         label = 'volume_gigabytes'
-        subq = session.query(models.Volume.host,
-                             func.sum(models.Volume.size).label(label)).\
-                       filter_by(deleted=False).\
+        subq = model_query(context, models.Volume.host,
+                           func.sum(models.Volume.size).label(label),
+                           session=session,
+                           deleted_visibility="not_visible").\
                        group_by(models.Volume.host).\
                        subquery()
         return _service_get_all_topic_subquery(context,
@@ -326,11 +326,9 @@ def service_get_all_volume_sorted(context):
 
 @require_admin_context
 def service_get_by_args(context, host, binary):
-    session = get_session()
-    result = session.query(models.Service).\
+    result = model_query(context, models.Service).\
                      filter_by(host=host).\
                      filter_by(binary=binary).\
-                     filter_by(deleted=can_read_deleted(context)).\
                      first()
     if not result:
         raise exception.HostBinaryNotFound(host=host, binary=binary)

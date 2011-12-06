@@ -2718,12 +2718,8 @@ def provider_fw_rule_destroy(context, rule_id):
 
 @require_admin_context
 def user_get(context, id, session=None):
-    if not session:
-        session = get_session()
-
-    result = session.query(models.User).\
+    result = model_query(models.User, session=session).\
                      filter_by(id=id).\
-                     filter_by(deleted=can_read_deleted(context)).\
                      first()
 
     if not result:
@@ -2734,12 +2730,8 @@ def user_get(context, id, session=None):
 
 @require_admin_context
 def user_get_by_access_key(context, access_key, session=None):
-    if not session:
-        session = get_session()
-
-    result = session.query(models.User).\
+    result = model_query(models.User, session=session).\
                    filter_by(access_key=access_key).\
-                   filter_by(deleted=can_read_deleted(context)).\
                    first()
 
     if not result:
@@ -2774,10 +2766,7 @@ def user_delete(context, id):
 
 
 def user_get_all(context):
-    session = get_session()
-    return session.query(models.User).\
-                   filter_by(deleted=can_read_deleted(context)).\
-                   all()
+    return model_query(models.User).all()
 
 
 def user_get_roles(context, user_id):

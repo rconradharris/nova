@@ -3820,28 +3820,28 @@ def vsa_get_all_by_project(context, project_id):
 
 def s3_image_get(context, image_id):
     """Find local s3 image represented by the provided id"""
-    session = get_session()
-    res = session.query(models.S3Image)\
-                 .filter_by(id=image_id)\
-                 .first()
+    result = model_query(context, models.S3Image,
+                         deleted_visibility="visible").\
+                 filter_by(id=image_id).\
+                 first()
 
-    if not res:
+    if not result:
         raise exception.ImageNotFound(image_id=image_id)
 
-    return res
+    return result
 
 
 def s3_image_get_by_uuid(context, image_uuid):
     """Find local s3 image represented by the provided uuid"""
-    session = get_session()
-    res = session.query(models.S3Image)\
-                 .filter_by(uuid=image_uuid)\
-                 .first()
+    result = model_query(context, models.S3Image,
+                         deleted_visibility="visible").\
+                 filter_by(uuid=image_uuid).\
+                 first()
 
-    if not res:
+    if not result:
         raise exception.ImageNotFound(image_id=image_uuid)
 
-    return res
+    return result
 
 
 def s3_image_create(context, image_uuid):

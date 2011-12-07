@@ -150,7 +150,7 @@ def model_query(context, *args, **kwargs):
     :param read_deleted: if present, overrides context's read_deleted field.
     """
     session = kwargs.get('session') or get_session()
-    read_deleted = kwargs.get('read_deleted', context.read_deleted)
+    read_deleted = kwargs.get('read_deleted') or context.read_deleted
 
     query = session.query(*args)
 

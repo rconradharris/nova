@@ -207,38 +207,36 @@ def service_get_all(context, disabled=None):
 
 @require_admin_context
 def service_get_all_by_topic(context, topic):
-    query = model_query(context, models.Service,
-                        read_deleted="no")
-    return query.filter_by(disabled=False).\
-                 filter_by(topic=topic).\
-                 all()
+    return model_query(context, models.Service, read_deleted="no").\
+                filter_by(disabled=False).\
+                filter_by(topic=topic).\
+                all()
 
 
 @require_admin_context
 def service_get_by_host_and_topic(context, host, topic):
-    query = model_query(context, models.Service,
-                        read_deleted="no")
-    return query.filter_by(disabled=False).\
-                 filter_by(host=host).\
-                 filter_by(topic=topic).\
-                 first()
+    return model_query(context, models.Service, read_deleted="no").\
+                filter_by(disabled=False).\
+                filter_by(host=host).\
+                filter_by(topic=topic).\
+                first()
 
 
 @require_admin_context
 def service_get_all_by_host(context, host):
-    query = model_query(context, models.Service,
-                        read_deleted="no")
-    return query.filter_by(host=host).all()
+    return model_query(context, models.Service, read_deleted="no").\
+                filter_by(host=host).\
+                all()
 
 
 @require_admin_context
 def service_get_all_compute_by_host(context, host):
-    query = model_query(context, models.Service,
-                        read_deleted="no")
-    result = query.options(joinedload('compute_node')).\
-                   filter_by(host=host).\
-                   filter_by(topic="compute").\
-                   all()
+    result = model_query(context, models.Service, read_deleted="no").\
+                options(joinedload('compute_node')).\
+                filter_by(host=host).\
+                filter_by(topic="compute").\
+                all()
+
     if not result:
         raise exception.ComputeHostNotFound(host=host)
 
@@ -248,13 +246,14 @@ def service_get_all_compute_by_host(context, host):
 @require_admin_context
 def _service_get_all_topic_subquery(context, session, topic, subq, label):
     sort_value = getattr(subq.c, label)
-    query = model_query(context, models.Service, func.coalesce(sort_value, 0),
-                        read_deleted="no", session=session)
-    return query.filter_by(topic=topic).\
-                 filter_by(disabled=False).\
-                 outerjoin((subq, models.Service.host == subq.c.host)).\
-                 order_by(sort_value).\
-                 all()
+    return model_query(context, models.Service,
+                       func.coalesce(sort_value, 0),
+                       session=session, read_deleted="no").\
+                filter_by(topic=topic).\
+                filter_by(disabled=False).\
+                outerjoin((subq, models.Service.host == subq.c.host)).\
+                order_by(sort_value).\
+                all()
 
 
 @require_admin_context
@@ -327,6 +326,7 @@ def service_get_by_args(context, host, binary):
                      filter_by(host=host).\
                      filter_by(binary=binary).\
                      first()
+
     if not result:
         raise exception.HostBinaryNotFound(host=host, binary=binary)
 

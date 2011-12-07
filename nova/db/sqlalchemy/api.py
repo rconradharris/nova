@@ -512,7 +512,7 @@ def floating_ip_count_by_project(context, project_id):
     authorize_project_context(context, project_id)
     # TODO(tr3buchet): why leave auto_assigned floating IPs out?
     return model_query(context, models.FloatingIp,
-                       deleted_visibility="not_deleted").\
+                       deleted_visibility="not_visible").\
                    filter_by(project_id=project_id).\
                    filter_by(auto_assigned=False).\
                    count()
@@ -1639,7 +1639,7 @@ def network_associate(context, project_id, force=False):
 
         def network_query(project_filter):
             return model_query(context, models.Network, session=session,
-                              deleted_visibility="not_deleted").\
+                              deleted_visibility="not_visible").\
                            filter_by(project_id=project_filter).\
                            with_lockmode('update').\
                            first()

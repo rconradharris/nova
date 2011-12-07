@@ -367,7 +367,8 @@ def compute_node_get(context, compute_id, session=None):
 @require_admin_context
 def compute_node_get_all(context, session=None):
     return model_query(context, models.ComputeNode, session=session).\
-                    options(joinedload('service'))
+                    options(joinedload('service')).\
+                    all()
 
 
 @require_admin_context

@@ -365,7 +365,7 @@ def compute_node_get(context, compute_id, session=None):
 
 @require_admin_context
 def compute_node_get_all(context, session=None):
-    return = model_query(context, models.ComputeNode, session=session).\
+    return model_query(context, models.ComputeNode, session=session).\
                     options(joinedload('service'))
 
 
@@ -2618,7 +2618,7 @@ def security_group_destroy_all(context, session=None):
 ###################
 
 
-def _security_group_rule_get_query(context, session=session):
+def _security_group_rule_get_query(context, session=None):
     return model_query(context, models.SecurityGroupIngressRule,
                        session=session)
 
@@ -3154,7 +3154,7 @@ def _dict_with_extra_specs(inst_type_query):
 def _instance_type_get_query(context, session=None, deleted_visibility=None):
     return model_query(context, models.InstanceTypes, session=session,
                        deleted_visibility=deleted_visibility).\
-                     .options(joinedload('extra_specs'))
+                     options(joinedload('extra_specs'))
 
 
 @require_context

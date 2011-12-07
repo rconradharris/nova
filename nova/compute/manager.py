@@ -86,6 +86,18 @@ flags.DEFINE_integer("resize_confirm_window", 0,
                      " Set to 0 to disable.")
 flags.DEFINE_integer('host_state_interval', 120,
                      'Interval in seconds for querying the host status')
+flags.DEFINE_integer("running_deleted_instance_timeout", 0,
+                     "Number of seconds after being deleted when a"
+                     " still-running instance should be considered"
+                     " eligble for reaping.")
+flags.DEFINE_integer("running_deleted_instance_ticks_between_reap", 30,
+                     "Number of periodic scheduler ticks to wait between"
+                     " runs of the reaper task.")
+flags.DEFINE_string("running_deleted_instance_action", "noop",
+                     "Action to take if a running deleted instance is"
+                     " detected. Valid options are 'noop', 'log', and"
+                     " 'reap'. Set to 'noop' to disable.")
+
 
 LOG = logging.getLogger('nova.compute.manager')
 
@@ -1806,77 +1818,39 @@ class ComputeManager(manager.SchedulerDependentManager):
         self.driver.destroy(instance_ref, network_info,
                             block_device_info, True)
 
-    def periodic_tasks(self, context=None):
-        """Tasks to be run at a periodic interval."""
-        error_list = super(ComputeManager, self).periodic_tasks(context)
-        if error_list is None:
-            error_list = []
+    @manager.periodic_task
+    def _poll_rebooting_instances(self, context):
+        if FLAGS.reboot_timeout > 0:
+            self.driver.poll_rebooting_instances(FLAGS.reboot_timeout)
 
-        try:
-            if FLAGS.reboot_timeout > 0:
-                self.driver.poll_rebooting_instances(FLAGS.reboot_timeout)
-        except Exception as ex:
-            LOG.warning(_("Error during poll_rebooting_instances: %s"),
-                    unicode(ex))
-            error_list.append(ex)
+    @manager.periodic_task
+    def _poll_rescued_instances(self, context):
+        if FLAGS.rescue_timeout > 0:
+            self.driver.poll_rescued_instances(FLAGS.rescue_timeout)
 
-        try:
-            if FLAGS.rescue_timeout > 0:
-                self.driver.poll_rescued_instances(FLAGS.rescue_timeout)
-        except Exception as ex:
-            LOG.warning(_("Error during poll_rescued_instances: %s"),
-                    unicode(ex))
-            error_list.append(ex)
+    @manager.periodic_task
+    def _poll_unconfirmed_resizes(self, context):
+        if FLAGS.resize_confirm_window > 0:
+            self.driver.poll_unconfirmed_resizes(FLAGS.resize_confirm_window)
 
-        try:
-            if FLAGS.resize_confirm_window > 0:
-                self.driver.poll_unconfirmed_resizes(
-                        FLAGS.resize_confirm_window)
-        except Exception as ex:
-            LOG.warning(_("Error during poll_unconfirmed_resizes: %s"),
-                    unicode(ex))
-            error_list.append(ex)
+    @manager.periodic_task
+    def _poll_bandwidth_usage(self, context, start_time=None, stop_time=None):
+        if not start_time:
+            start_time = utils.current_audit_period()[1]
 
-        try:
-            self._report_driver_status()
-        except Exception as ex:
-            LOG.warning(_("Error during report_driver_status(): %s"),
-                    unicode(ex))
-            error_list.append(ex)
-
-        try:
-            self._sync_power_states(context)
-        except Exception as ex:
-            LOG.warning(_("Error during power_state sync: %s"), unicode(ex))
-            error_list.append(ex)
-
-        try:
-            self._reclaim_queued_deletes(context)
-        except Exception as ex:
-            LOG.warning(_("Error during reclamation of queued deletes: %s"),
-                        unicode(ex))
-            error_list.append(ex)
-        try:
-            start = utils.current_audit_period()[1]
-            self._update_bandwidth_usage(context, start)
-        except NotImplementedError:
-            # Not all hypervisors have bandwidth polling implemented yet.
-            # If they don't id doesn't break anything, they just don't get the
-            # info in the usage events. (mdragon)
-            pass
-        except Exception as ex:
-            LOG.warning(_("Error updating bandwidth usage: %s"),
-                        unicode(ex))
-            error_list.append(ex)
-
-        return error_list
-
-    def _update_bandwidth_usage(self, context, start_time, stop_time=None):
         curr_time = time.time()
         if curr_time - self._last_bw_usage_poll > FLAGS.bandwith_poll_interval:
             self._last_bw_usage_poll = curr_time
             LOG.info(_("Updating bandwidth usage cache"))
-            bw_usage = self.driver.get_all_bw_usage(start_time, stop_time)
+
+            try:
+                bw_usage = self.driver.get_all_bw_usage(start_time, stop_time)
+            except NotImplementedError:
+                # NOTE(mdragon): Not all hypervisors have bandwidth polling
+                # implemented yet.  If they don't id doesn't break anything,
+                # they just don't get the info in the usage events.
+                return
+
             for usage in bw_usage:
                 vif = usage['virtual_interface']
                 self.db.bw_usage_update(context,
@@ -1885,7 +1859,8 @@ class ComputeManager(manager.SchedulerDependentManager):
                                         start_time,
                                         usage['bw_in'], usage['bw_out'])
 
-    def _report_driver_status(self):
+    @manager.periodic_task
+    def _report_driver_status(self, context):
         curr_time = time.time()
         if curr_time - self._last_host_check > FLAGS.host_state_interval:
             self._last_host_check = curr_time
@@ -1895,6 +1870,7 @@ class ComputeManager(manager.SchedulerDependentManager):
             self.update_service_capabilities(
                 self.driver.get_host_stats(refresh=True))
 
+    @manager.periodic_task
     def _sync_power_states(self, context):
         """Align power states between the database and the hypervisor.
 
@@ -1933,16 +1909,64 @@ class ComputeManager(manager.SchedulerDependentManager):
                                   db_instance["id"],
                                   power_state=vm_power_state)
 
+    @manager.periodic_task
     def _reclaim_queued_deletes(self, context):
         """Reclaim instances that are queued for deletion."""
+        if FLAGS.reclaim_instance_interval <= 0:
+            LOG.debug(_("FLAGS.reclaim_instance_interval <= 0, skipping..."))
+            return
 
         instances = self.db.instance_get_all_by_host(context, self.host)
-
-        queue_time = datetime.timedelta(
-                         seconds=FLAGS.reclaim_instance_interval)
-        curtime = utils.utcnow()
         for instance in instances:
-            if instance['vm_state'] == vm_states.SOFT_DELETE and \
-               (curtime - instance['deleted_at']) >= queue_time:
-                LOG.info('Deleting %s' % instance['name'])
+            old_enough = (not instance.deleted_at or utils.is_older_than(
+                    instance.deleted_at,
+                    FLAGS.reclaim_instance_interval))
+            soft_deleted = instance.vm_state == vm_states.SOFT_DELETE
+
+            if soft_deleted and old_enough:
+                instance_id = instance.id
+                LOG.info(_("Reclaiming deleted instance %(instance_id)s"),
+                         locals())
                 self._delete_instance(context, instance)
+
+    @manager.periodic_task(
+        ticks_between_runs=FLAGS.running_deleted_instance_ticks_between_reap)
+    def _reap_running_deleted_instances(self, context):
+        """Reap any instances which are erroneously still running after
+        having been deleted.
+        """
+        action = FLAGS.running_deleted_instance_action
+
+        if action == "noop":
+            return
+
+        present_name_labels = set(self.driver.list_instances())
+
+        # NOTE(sirp): admin contexts don't ordinarily return deleted records
+        with utils.temporary_mutation(context, read_deleted="yes"):
+            instances = self.db.instance_get_all_by_host(context, self.host)
+            for instance in instances:
+                present = instance.name in present_name_labels
+                erroneously_running = instance.deleted and present
+                old_enough = (not instance.deleted_at or utils.is_older_than(
+                        instance.deleted_at,
+                        FLAGS.running_deleted_instance_timeout))
+
+                if erroneously_running and old_enough:
+                    instance_id = instance.id
+                    name_label = instance.name
+
+                    if action == "log":
+                        LOG.warning(_("Detected instance %(instance_id)s with"
+                                      " name label '%(name_label)s' which is"
+                                      " marked as DELETED but still present on"
+                                      " host."), locals())
+
+                    elif action == 'reap':
+                        LOG.info(_("Destroying instance %(instance_id)s with"
+                                   " name label '%(name_label)s' which is"
+                                   " marked as DELETED but still present on"
+                                   " host."), locals())
+                        self._shutdown_instance(
+                                context, instance, 'Terminating', True)
+                        self._cleanup_volumes(context, instance_id)

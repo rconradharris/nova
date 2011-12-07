@@ -106,7 +106,7 @@ class CloudTestCase(test.TestCase):
         self.project_id = 'fake'
         self.context = context.RequestContext(self.user_id,
                                               self.project_id,
-                                              True)
+                                              is_admin=True)
 
         def fake_show(meh, context, id):
             return {'id': id,

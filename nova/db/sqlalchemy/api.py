@@ -586,7 +586,6 @@ def floating_ip_set_auto_assigned(context, address):
         floating_ip_ref.save(session=session)
 
 
-
 @require_admin_context
 def _floating_ip_get_all(context):
     return model_query(context, models.FloatingIp,
@@ -943,7 +942,7 @@ def virtual_interface_update(context, vif_id, values):
 
 
 @require_context
-def _virtual_interface_query(context,  session=None):
+def _virtual_interface_query(context, session=None):
     return model_query(context, models.VirtualInterfaces, session=session,
                        deleted_visibility="visible").\
                       options(joinedload('fixed_ips'))
@@ -1766,10 +1765,10 @@ def network_get_all_by_uuids(context, network_uuids, project_id=None):
     project_or_none = or_(models.Network.project_id == project_id,
                           models.Network.project_id == None)
     result = model_query(context, models.Network,
-                         deleted_visibility="not_visible")
-                 filter(models.Network.uuid.in_(network_uuids)).\
-                 filter(project_or_none).\
-                 all()
+                         deleted_visibility="not_visible").\
+                filter(models.Network.uuid.in_(network_uuids)).\
+                filter(project_or_none).\
+                all()
 
     if not result:
         raise exception.NoNetworksFound()
@@ -1806,12 +1805,12 @@ def network_get_associated_fixed_ips(context, network_id):
     # FIXME(sirp): since this returns fixed_ips, this would be better named
     # fixed_ip_get_all_by_network.
     return model_query(context, models.FixedIp,
-                       deleted_visibility="not_visible")
-                   options(joinedload_all('instance')).\
-                   filter_by(network_id=network_id).\
-                   filter(models.FixedIp.instance_id != None).\
-                   filter(models.FixedIp.virtual_interface_id != None).\
-                   all()
+                       deleted_visibility="not_visible").\
+                    options(joinedload_all('instance')).\
+                    filter_by(network_id=network_id).\
+                    filter(models.FixedIp.instance_id != None).\
+                    filter(models.FixedIp.virtual_interface_id != None).\
+                    all()
 
 
 @require_admin_context
@@ -2266,6 +2265,7 @@ def _volume_metadata_get_query(context, volume_id, session=None):
                        deleted_visibility="not_visibile").\
                     filter_by(volume_id=volume_id)
 
+
 @require_context
 @require_volume_exists
 def volume_metadata_get(context, volume_id):
@@ -2500,7 +2500,7 @@ def block_device_mapping_destroy_by_instance_and_volume(context, instance_id,
 def _security_group_get_query(context, session=None, deleted_visibility=None):
     return model_query(context, models.SecurityGroup, session=session,
                        deleted_visibility=deleted_visibility).\
-                   options(joinedload_all('rules')).\
+                   options(joinedload_all('rules'))
 
 
 @require_context
@@ -2516,7 +2516,6 @@ def security_group_get(context, security_group_id, session=None):
 
     if is_user_context(context):
         query = query.filter_by(project_id=context.project_id)
-
 
     result = query.first()
 
@@ -2622,6 +2621,7 @@ def security_group_destroy_all(context, session=None):
 def _security_group_rule_get_query(context, session=session):
     return model_query(context, models.SecurityGroupIngressRule,
                        session=session)
+
 
 @require_context
 def security_group_rule_get(context, security_group_rule_id, session=None):
@@ -2849,7 +2849,7 @@ def project_add_member(context, project_id, user_id):
 
 def project_get(context, id, session=None):
     result = model_query(context, models.Project, session=session,
-                         deleted_visibility="not_visible")).\
+                         deleted_visibility="not_visible").\
                      filter_by(id=id).\
                      options(joinedload_all('members')).\
                      first()
@@ -2915,7 +2915,7 @@ def project_get_networks(context, project_id, associate=True):
     # a project with a network if it doesn't have one and
     # associate is true
     result = model_query(context, models.Network,
-                         deleted_visibility="not_visible")).\
+                         deleted_visibility="not_visible").\
                      filter_by(project_id=project_id).\
                      all()
 
@@ -3091,7 +3091,6 @@ def console_get(context, console_id, instance_id=None):
     if instance_id is not None:
         query = query.filter_by(instance_id=instance_id)
 
-
     result = query.first()
 
     if not result:
@@ -3165,7 +3164,8 @@ def instance_type_get_all(context, inactive=False, filters=None):
     """
     filters = filters or {}
     deleted_visibility = "visible" if inactive else "not_visible"
-    query = _instance_type_get_query(context, deleted_visibility=deleted_visibility)
+    query = _instance_type_get_query(
+            context, deleted_visibility=deleted_visibility)
 
     if 'min_memory_mb' in filters:
         query = query.filter(
@@ -3310,6 +3310,7 @@ def _instance_metadata_get_query(context, instance_id, session=None):
                        deleted_visibility="not_visible").\
                     filter_by(instance_id=instance_id)
 
+
 @require_context
 @require_instance_exists
 def instance_metadata_get(context, instance_id):
@@ -3437,7 +3438,7 @@ def agent_build_destroy(context, agent_build_id):
 def agent_build_update(context, agent_build_id, values):
     session = get_session()
     with session.begin():
-       agent_build_ref =  model_query(context, models.AgentBuild,
+        agent_build_ref = model_query(context, models.AgentBuild,
                                       session=session,
                                       deleted_visibility="visible").\
                    filter_by(id=agent_build_id).\
@@ -3669,6 +3670,7 @@ def _volume_type_extra_specs_query(context, volume_type_id, session=None):
     return model_query(context, models.VolumeTypeExtraSpecs, session=session,
                        deleted_visibility="not_visible").\
                     filter_by(volume_type_id=volume_type_id)
+
 
 @require_context
 def volume_type_extra_specs_get(context, volume_type_id):
@@ -4001,7 +4003,7 @@ def sm_volume_get(context, volume_id):
 
     if not result:
         raise exception.NotFound(
-                _("No sm_volume with id %(volume_id)s")  % locals())
+                _("No sm_volume with id %(volume_id)s") % locals())
 
     return result
 

@@ -300,7 +300,7 @@ class ComputeManager(manager.SchedulerDependentManager):
     def _run_instance(self, context, instance_uuid,
                       requested_networks=None,
                       injected_files=[],
-                      admin_pass=None,
+                      admin_password=None,
                       **kwargs):
         """Launch a new instance with specified options."""
         context = context.elevated()
@@ -315,7 +315,7 @@ class ComputeManager(manager.SchedulerDependentManager):
                 block_device_info = self._prep_block_device(context, instance)
                 instance = self._spawn(context, instance, image_meta,
                                        network_info, block_device_info,
-                                       injected_files, admin_pass)
+                                       injected_files, admin_password)
             except:
                 with utils.save_and_reraise_exception():
                     self._deallocate_network(context, instance)
@@ -970,7 +970,7 @@ class ComputeManager(manager.SchedulerDependentManager):
         network_info = self._get_instance_nw_info(context, instance_ref)
         self.driver.destroy(instance_ref, network_info)
         topic = self.db.queue_get_for(context, FLAGS.compute_topic,
-                instance_ref['host'])
+                migration_ref['source_compute'])
         rpc.cast(context, topic,
                 {'method': 'finish_revert_resize',
                  'args': {'instance_uuid': instance_ref['uuid'],

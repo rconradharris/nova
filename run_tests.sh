@@ -115,7 +115,7 @@ function run_pep8 {
   #     other than what the PEP8 tool claims. It is deprecated in Python 3, so,
   #     perhaps the mistake was thinking that the deprecation applied to Python 2
   #     as well.
-  pep8_opts="--repeat --ignore=E202,W602 --exclude=vcsversion.py,*.swp"
+  pep8_opts="--repeat --ignore=E202,W602 --exclude=*.swp"
   if [ $short_pep8 -eq 0 ]; then
       pep8_opts+=" --show-pep8 --show-source"
   fi

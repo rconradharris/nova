@@ -148,9 +148,12 @@ def model_query(context, *args, **kwargs):
     :param context: context to query under
     :param session: if present, the session to use
     :param read_deleted: if present, overrides context's read_deleted field.
+    :param project_only: if present and context is user-type, then restrict
+        query to match the context's project_id.
     """
     session = kwargs.get('session') or get_session()
     read_deleted = kwargs.get('read_deleted') or context.read_deleted
+    project_only = kwargs.get('project_only')
 
     query = session.query(*args)
 
@@ -163,6 +166,9 @@ def model_query(context, *args, **kwargs):
     else:
         raise Exception(
                 _("Unrecognized read_deleted value '%s'") % read_deleted)
+
+    if project_only and is_user_context(context):
+        query = query.filter_by(project_id=context.project_id)
 
     return query
 
@@ -2153,8 +2159,9 @@ def volume_detached(context, volume_id):
 
 
 @require_context
-def _volume_get_query(context, session=None):
-    return model_query(context, models.Volume, session=session).\
+def _volume_get_query(context, session=None, project_only=False):
+    return model_query(context, models.Volume, session=session,
+                       project_only=project_only).\
                      options(joinedload('instance')).\
                      options(joinedload('volume_metadata')).\
                      options(joinedload('volume_type'))
@@ -2162,16 +2169,9 @@ def _volume_get_query(context, session=None):
 
 @require_context
 def volume_get(context, volume_id, session=None):
-    query = _volume_get_query(context, session=session).\
-                    filter_by(id=volume_id)
-
-    if is_user_context(context):
-        # TODO(sirp): filtering by project if is_user_context is a common
-        # pattern in this file, perhaps this should be extracted to a
-        # function.
-        query = query.filter_by(project_id=context.project_id)
-
-    result = query.first()
+    result = _volume_get_query(context, session=session, project_only=True).\
+                    filter_by(id=volume_id).\
+                    first()
 
     if not result:
         raise exception.VolumeNotFound(volume_id=volume_id)

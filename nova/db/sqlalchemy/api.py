@@ -2712,7 +2712,7 @@ def provider_fw_rule_destroy(context, rule_id):
 
 @require_admin_context
 def user_get(context, id, session=None):
-    result = model_query(models.User, session=session).\
+    result = model_query(context, models.User, session=session).\
                      filter_by(id=id).\
                      first()
 
@@ -2760,7 +2760,7 @@ def user_delete(context, id):
 
 
 def user_get_all(context):
-    return model_query(models.User).all()
+    return model_query(context, models.User).all()
 
 
 def user_get_roles(context, user_id):

@@ -15,6 +15,7 @@ function usage {
   echo "  -f, --force              Force a clean re-build of the virtual environment. Useful when dependencies have been added."
   echo "  -p, --pep8               Just run pep8"
   echo "  -P, --no-pep8            Don't run pep8"
+  echo "  -S, --short-pep8         Display abbreviated pep8 information."
   echo "  -c, --coverage           Generate coverage report"
   echo "  -h, --help               Print this usage message"
   echo "  --hide-elapsed           Don't print the elapsed time for each test along with slow test list"
@@ -37,6 +38,7 @@ function process_option {
     -p|--pep8) just_pep8=1;;
     -P|--no-pep8) no_pep8=1;;
     -c|--coverage) coverage=1;;
+    -S|--short-pep8) short_pep8=1;;
     -*) noseopts="$noseopts $1";;
     *) noseargs="$noseargs $1"
   esac
@@ -56,6 +58,7 @@ just_pep8=0
 no_pep8=0
 coverage=0
 recreate_db=1
+short_pep8=0
 
 for arg in "$@"; do
   process_option $arg
@@ -112,9 +115,11 @@ function run_pep8 {
   #     other than what the PEP8 tool claims. It is deprecated in Python 3, so,
   #     perhaps the mistake was thinking that the deprecation applied to Python 2
   #     as well.
-  ${wrapper} pep8 --repeat --show-pep8 --show-source \
-    --ignore=E202,W602 \
-    --exclude=vcsversion.py,*.swp ${srcfiles}
+  pep8_opts="--repeat --ignore=E202,W602 --exclude=vcsversion.py,*.swp"
+  if [ $short_pep8 -eq 0 ]; then
+      pep8_opts+=" --show-pep8 --show-source"
+  fi
+  ${wrapper} pep8 ${pep8_opts} ${srcfiles}
 }
 
 NOSETESTS="python run_tests.py $noseopts $noseargs"

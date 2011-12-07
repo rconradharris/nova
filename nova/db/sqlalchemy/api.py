@@ -2725,7 +2725,7 @@ def user_get(context, id, session=None):
 
 @require_admin_context
 def user_get_by_access_key(context, access_key, session=None):
-    result = model_query(models.User, session=session).\
+    result = model_query(context, models.User, session=session).\
                    filter_by(access_key=access_key).\
                    first()
 

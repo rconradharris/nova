@@ -153,7 +153,7 @@ def model_query(context, *args, **kwargs):
 
     if read_deleted == 'no':
         query = query.filter_by(deleted=False)
-    elif read_deleted == 'visible':
+    elif read_deleted == 'yes':
         pass  # omit the filter to include deleted and active
     elif read_deleted == 'only':
         query = query.filter_by(deleted=True)
@@ -770,11 +770,11 @@ def fixed_ip_disassociate(context, address):
 def fixed_ip_disassociate_all_by_timeout(context, host, time):
     session = get_session()
     inner_q = model_query(context, models.Network.id, session=session,
-                          read_deleted="visible").\
+                          read_deleted="yes").\
                       filter_by(host=host).\
                       subquery()
     result = model_query(context, models.FixedIp, session=session,
-                         read_deleted="visible").\
+                         read_deleted="yes").\
                      filter(models.FixedIp.network_id.in_(inner_q)).\
                      filter(models.FixedIp.updated_at < time).\
                      filter(models.FixedIp.instance_id != None).\
@@ -805,7 +805,7 @@ def fixed_ip_get(context, id, session=None):
 @require_admin_context
 def fixed_ip_get_all(context, session=None):
     result = model_query(context, models.FixedIp, session=session,
-                         read_deleted="visible").\
+                         read_deleted="yes").\
                      options(joinedload('floating_ips')).\
                      all()
     if not result:
@@ -817,7 +817,7 @@ def fixed_ip_get_all(context, session=None):
 @require_admin_context
 def fixed_ip_get_all_by_instance_host(context, host=None):
     result = model_query(context, models.FixedIp,
-                         read_deleted="visible").\
+                         read_deleted="yes").\
                      options(joinedload('floating_ips')).\
                      join(models.FixedIp.instance).\
                      filter_by(state=1).\
@@ -833,7 +833,7 @@ def fixed_ip_get_all_by_instance_host(context, host=None):
 @require_context
 def fixed_ip_get_by_address(context, address, session=None):
     result = model_query(context, models.FixedIp, session=session,
-                         read_deleted="visible").\
+                         read_deleted="yes").\
                      filter_by(address=address).\
                      options(joinedload('floating_ips')).\
                      options(joinedload('network')).\
@@ -944,7 +944,7 @@ def virtual_interface_update(context, vif_id, values):
 @require_context
 def _virtual_interface_query(context, session=None):
     return model_query(context, models.VirtualInterface, session=session,
-                       read_deleted="visible").\
+                       read_deleted="yes").\
                       options(joinedload('fixed_ips'))
 
 
@@ -2233,7 +2233,7 @@ def volume_get_instance(context, volume_id):
 @require_admin_context
 def volume_get_iscsi_target_num(context, volume_id):
     result = model_query(context, models.IscsiTarget,
-                         read_deleted="visible").\
+                         read_deleted="yes").\
                      filter_by(volume_id=volume_id).\
                      first()
 
@@ -2958,7 +2958,7 @@ def migration_update(context, id, values):
 @require_admin_context
 def migration_get(context, id, session=None):
     result = model_query(context, models.Migration, session=session,
-                         read_deleted="visible").\
+                         read_deleted="yes").\
                      filter_by(id=id).\
                      first()
 
@@ -2971,7 +2971,7 @@ def migration_get(context, id, session=None):
 @require_admin_context
 def migration_get_by_instance_and_status(context, instance_uuid, status):
     result = model_query(context, models.Migration,
-                         read_deleted="visible").\
+                         read_deleted="yes").\
                      filter_by(instance_uuid=instance_uuid).\
                      filter_by(status=status).\
                      first()
@@ -2989,7 +2989,7 @@ def migration_get_all_unconfirmed(context, confirm_window, session=None):
             seconds=confirm_window)
 
     return model_query(context, models.Migration, session=session,
-                       read_deleted="visible").\
+                       read_deleted="yes").\
             filter(models.Migration.updated_at <= confirm_window).\
             filter_by(status="FINISHED").\
             all()
@@ -3063,7 +3063,7 @@ def console_delete(context, console_id):
 
 def console_get_by_pool_instance(context, pool_id, instance_id):
     result = model_query(context, models.Console,
-                         read_deleted="visible").\
+                         read_deleted="yes").\
                    filter_by(pool_id=pool_id).\
                    filter_by(instance_id=instance_id).\
                    options(joinedload('pool')).\
@@ -3078,14 +3078,14 @@ def console_get_by_pool_instance(context, pool_id, instance_id):
 
 def console_get_all_by_instance(context, instance_id):
     return model_query(context, models.Console,
-                       read_deleted="visible").\
+                       read_deleted="yes").\
                    filter_by(instance_id=instance_id).\
                    all()
 
 
 def console_get(context, console_id, instance_id=None):
     query = model_query(context, models.Console,
-                        read_deleted="visible").\
+                        read_deleted="yes").\
                     filter_by(id=console_id).\
                     options(joinedload('pool'))
 
@@ -3164,7 +3164,7 @@ def instance_type_get_all(context, inactive=False, filters=None):
     Returns all instance types.
     """
     filters = filters or {}
-    read_deleted = "visible" if inactive else "no"
+    read_deleted = "yes" if inactive else "no"
     query = _instance_type_get_query(
             context, read_deleted=read_deleted)
 
@@ -3184,7 +3184,7 @@ def instance_type_get_all(context, inactive=False, filters=None):
 def instance_type_get(context, id):
     """Returns a dict describing specific instance_type"""
     result = _instance_type_get_query(
-                        context, read_deleted="visible").\
+                        context, read_deleted="yes").\
                     filter_by(id=id).\
                     first()
 
@@ -3198,7 +3198,7 @@ def instance_type_get(context, id):
 def instance_type_get_by_name(context, name):
     """Returns a dict describing specific instance_type"""
     result = _instance_type_get_query(
-                        context, read_deleted="visible").\
+                        context, read_deleted="yes").\
                     filter_by(name=name).\
                     first()
 
@@ -3212,7 +3212,7 @@ def instance_type_get_by_name(context, name):
 def instance_type_get_by_flavor_id(context, flavor_id):
     """Returns a dict describing specific flavor_id"""
     result = _instance_type_get_query(
-                        context, read_deleted="visible").\
+                        context, read_deleted="yes").\
                     filter_by(flavorid=flavor_id).\
                     first()
 
@@ -3226,7 +3226,7 @@ def instance_type_get_by_flavor_id(context, flavor_id):
 def instance_type_destroy(context, name):
     """ Marks specific instance_type as deleted"""
     instance_type_ref = model_query(context, models.InstanceTypes,
-                                    read_deleted="visible").\
+                                    read_deleted="yes").\
                       filter_by(name=name)
 
     # FIXME(sirp): this should update deleted_at and updated_at as well
@@ -3244,7 +3244,7 @@ def instance_type_purge(context, name):
         Usually instance_type_destroy should be used
     """
     instance_type_ref = model_query(context, models.InstanceTypes,
-                                    read_deleted="visible").\
+                                    read_deleted="yes").\
                       filter_by(name=name)
 
     records = instance_type_ref.delete()
@@ -3300,7 +3300,7 @@ def zone_get(context, zone_id):
 @require_admin_context
 def zone_get_all(context):
     return model_query(context, models.Zone,
-                       read_deleted="visible").all()
+                       read_deleted="yes").all()
 
 
 ####################
@@ -3428,7 +3428,7 @@ def agent_build_destroy(context, agent_build_id):
     session = get_session()
     with session.begin():
         model_query(context, models.AgentBuild, session=session,
-                    read_deleted="visible").\
+                    read_deleted="yes").\
                 filter_by(id=agent_build_id).\
                 update({'deleted': True,
                         'deleted_at': utils.utcnow(),
@@ -3441,7 +3441,7 @@ def agent_build_update(context, agent_build_id, values):
     with session.begin():
         agent_build_ref = model_query(context, models.AgentBuild,
                                       session=session,
-                                      read_deleted="visible").\
+                                      read_deleted="yes").\
                    filter_by(id=agent_build_id).\
                    first()
 
@@ -3454,7 +3454,7 @@ def agent_build_update(context, agent_build_id, values):
 @require_context
 def bw_usage_get_by_instance(context, instance_id, start_period):
     return model_query(context, models.BandwidthUsage,
-                       read_deleted="visible").\
+                       read_deleted="yes").\
                    filter_by(instance_id=instance_id).\
                    filter_by(start_period=start_period).\
                    all()
@@ -3472,7 +3472,7 @@ def bw_usage_update(context,
 
     with session.begin():
         bwusage = model_query(context, models.BandwidthUsage,
-                              read_deleted="visible").\
+                              read_deleted="yes").\
                       filter_by(instance_id=instance_id).\
                       filter_by(start_period=start_period).\
                       filter_by(network_label=network_label).\
@@ -3588,7 +3588,7 @@ def volume_type_get_all(context, inactive=False, filters=None):
     """
     filters = filters or {}
 
-    read_deleted = "visible" if inactive else "no"
+    read_deleted = "yes" if inactive else "no"
     rows = model_query(context, models.VolumeTypes,
                        read_deleted=read_deleted).\
                         options(joinedload('extra_specs')).\
@@ -3608,7 +3608,7 @@ def volume_type_get_all(context, inactive=False, filters=None):
 def volume_type_get(context, id):
     """Returns a dict describing specific volume_type"""
     result = model_query(context, models.VolumeTypes,
-                         read_deleted="visible").\
+                         read_deleted="yes").\
                     options(joinedload('extra_specs')).\
                     filter_by(id=id).\
                     first()
@@ -3623,7 +3623,7 @@ def volume_type_get(context, id):
 def volume_type_get_by_name(context, name):
     """Returns a dict describing specific volume_type"""
     result = model_query(context, models.VolumeTypes,
-                         read_deleted="visible").\
+                         read_deleted="yes").\
                     options(joinedload('extra_specs')).\
                     filter_by(name=name).\
                     first()
@@ -3638,7 +3638,7 @@ def volume_type_get_by_name(context, name):
 def volume_type_destroy(context, name):
     """ Marks specific volume_type as deleted"""
     volume_type_ref = model_query(context, models.VolumeTypes,
-                                  read_deleted="visible").\
+                                  read_deleted="yes").\
                                       filter_by(name=name)
 
     # FIXME(sirp): we should be setting deleted_at and updated_at here
@@ -3655,7 +3655,7 @@ def volume_type_purge(context, name):
         Usually volume_type_destroy should be used
     """
     volume_type_ref = model_query(context, models.VolumeTypes,
-                                  read_deleted="visible").\
+                                  read_deleted="yes").\
                                       filter_by(name=name)
     records = volume_type_ref.delete()
     if records == 0:
@@ -3817,7 +3817,7 @@ def vsa_get_all_by_project(context, project_id):
 def s3_image_get(context, image_id):
     """Find local s3 image represented by the provided id"""
     result = model_query(context, models.S3Image,
-                         read_deleted="visible").\
+                         read_deleted="yes").\
                  filter_by(id=image_id).\
                  first()
 
@@ -3830,7 +3830,7 @@ def s3_image_get(context, image_id):
 def s3_image_get_by_uuid(context, image_uuid):
     """Find local s3 image represented by the provided uuid"""
     result = model_query(context, models.S3Image,
-                         read_deleted="visible").\
+                         read_deleted="yes").\
                  filter_by(uuid=image_uuid).\
                  first()
 
@@ -3866,7 +3866,7 @@ def sm_backend_conf_create(context, values):
 @require_admin_context
 def sm_backend_conf_update(context, sm_backend_id, values):
     backend_conf = model_query(context, models.SMBackendConf,
-                               read_deleted="visible").\
+                               read_deleted="yes").\
                            filter_by(id=sm_backend_id).\
                            first()
 
@@ -3886,7 +3886,7 @@ def sm_backend_conf_delete(context, sm_backend_id):
     session = get_session()
     with session.begin():
         model_query(context, models.SMBackendConf, session=session,
-                    read_deleted="visible").\
+                    read_deleted="yes").\
                 filter_by(id=sm_backend_id).\
                 delete()
 
@@ -3894,7 +3894,7 @@ def sm_backend_conf_delete(context, sm_backend_id):
 @require_admin_context
 def sm_backend_conf_get(context, sm_backend_id):
     result = model_query(context, models.SMBackendConf,
-                         read_deleted="visible").\
+                         read_deleted="yes").\
                      filter_by(id=sm_backend_id).\
                      first()
 
@@ -3910,14 +3910,14 @@ def sm_backend_conf_get_by_sr(context, sr_uuid):
     session = get_session()
     # FIXME(sirp): shouldn't this have a `first()` qualifier attached?
     return model_query(context, models.SMBackendConf,
-                       read_deleted="visible").\
+                       read_deleted="yes").\
                     filter_by(sr_uuid=sr_uuid)
 
 
 @require_admin_context
 def sm_backend_conf_get_all(context):
     return model_query(context, models.SMBackendConf,
-                       read_deleted="visible").\
+                       read_deleted="yes").\
                     all()
 
 
@@ -3926,7 +3926,7 @@ def sm_backend_conf_get_all(context):
 
 def _sm_flavor_get_query(context, sm_flavor_label, session=None):
     return model_query(context, models.SMFlavors, session=session,
-                       read_deleted="visible").\
+                       read_deleted="yes").\
                         filter_by(label=sm_flavor_label)
 
 
@@ -3967,7 +3967,7 @@ def sm_flavor_get(context, sm_flavor_label):
 @require_admin_context
 def sm_flavor_get_all(context):
     return model_query(context, models.SMFlavors,
-                       read_deleted="visible").all()
+                       read_deleted="yes").all()
 
 
 ###############################
@@ -3975,7 +3975,7 @@ def sm_flavor_get_all(context):
 
 def _sm_volume_get_query(context, volume_id, session=None):
     return model_query(context, models.SMVolume, session=session,
-                       read_deleted="visible").\
+                       read_deleted="yes").\
                         filter_by(id=volume_id)
 
 
@@ -4011,4 +4011,4 @@ def sm_volume_get(context, volume_id):
 
 def sm_volume_get_all(context):
     return model_query(context, models.SMVolume,
-                       read_deleted="visible").all()
+                       read_deleted="yes").all()

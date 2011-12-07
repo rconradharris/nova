@@ -143,13 +143,16 @@ def require_volume_exists(f):
 
 
 def model_query(context, *args, **kwargs):
+    """Query helper that accounts for context's `read_deleted` field.
+
+    :param context: context to query under
+    :param session: if present, the session to use
+    :param read_deleted: if present, overrides context's read_deleted field.
+    """
     session = kwargs.get('session') or get_session()
-    read_deleted = kwargs.get('read_deleted')
+    read_deleted = kwargs.get('read_deleted', context.read_deleted)
 
     query = session.query(*args)
-
-    if read_deleted is None:
-        read_deleted = context.read_deleted
 
     if read_deleted == 'no':
         query = query.filter_by(deleted=False)
@@ -158,8 +161,9 @@ def model_query(context, *args, **kwargs):
     elif read_deleted == 'only':
         query = query.filter_by(deleted=True)
     else:
-        raise Exception("Unrecognized read_deleted value '%s'"
-                        % read_deleted)
+        raise Exception(
+                _("Unrecognized read_deleted value '%s'") % read_deleted)
+
     return query
 
 
@@ -1156,29 +1160,33 @@ def instance_stop(context, instance_id):
 
 @require_context
 def instance_get_by_uuid(context, uuid, session=None):
-    partial = _build_instance_get(context, session=session)
-    result = partial.filter_by(uuid=uuid)
-    result = result.first()
+    result = _build_instance_get(context, session=session).\
+                filter_by(uuid=uuid).\
+                first()
+
     if not result:
         # FIXME(sirp): it would be nice if InstanceNotFound would accept a
         # uuid parameter as well
         raise exception.InstanceNotFound(instance_id=uuid)
+
     return result
 
 
 @require_context
 def instance_get(context, instance_id, session=None):
-    partial = _build_instance_get(context, session=session)
-    result = partial.filter_by(id=instance_id)
-    result = result.first()
+    result = _build_instance_get(context, session=session).\
+                filter_by(id=instance_id).\
+                first()
+
     if not result:
         raise exception.InstanceNotFound(instance_id=instance_id)
+
     return result
 
 
 @require_context
 def _build_instance_get(context, session=None):
-    partial = model_query(context, models.Instance, session=session).\
+    query = model_query(context, models.Instance, session=session).\
             options(joinedload_all('fixed_ips.floating_ips')).\
             options(joinedload_all('fixed_ips.network')).\
             options(joinedload_all('fixed_ips.virtual_interface')).\
@@ -1188,9 +1196,9 @@ def _build_instance_get(context, session=None):
             options(joinedload('instance_type'))
 
     if is_user_context(context):
-        partial = partial.filter_by(project_id=context.project_id)
+        query = query.filter_by(project_id=context.project_id)
 
-    return partial
+    return query
 
 
 @require_admin_context

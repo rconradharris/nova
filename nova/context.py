@@ -32,10 +32,9 @@ class RequestContext(object):
 
     """
 
-    def __init__(self, user_id, project_id, is_admin=None,
-                 read_deleted="no", roles=None,
-                 remote_address=None, timestamp=None, request_id=None,
-                 auth_token=None, strategy='noauth'):
+    def __init__(self, user_id, project_id, is_admin=None, read_deleted="no",
+                 roles=None, remote_address=None, timestamp=None,
+                 request_id=None, auth_token=None, strategy='noauth'):
         """
         :param read_deleted: 'no' indicates deleted records are hidden, 'yes'
             indicates deleted records are visible, 'only' indicates that

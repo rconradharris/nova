@@ -1681,14 +1681,15 @@ def network_count_allocated_ips(context, network_id):
 def network_count_available_ips(context, network_id):
     return _network_ips_query(context, network_id).\
                     filter_by(allocated=False).\
+                    filter_by(reserved=False).\
                     count()
 
 
 @require_admin_context
 def network_count_reserved_ips(context, network_id):
     return _network_ips_query(context, network_id).\
-                   filter_by(reserved=True).\
-                   count()
+                    filter_by(reserved=True).\
+                    count()
 
 
 @require_admin_context

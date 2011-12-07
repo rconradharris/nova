@@ -943,7 +943,7 @@ def virtual_interface_update(context, vif_id, values):
 
 @require_context
 def _virtual_interface_query(context, session=None):
-    return model_query(context, models.VirtualInterfaces, session=session,
+    return model_query(context, models.VirtualInterface, session=session,
                        deleted_visibility="visible").\
                       options(joinedload('fixed_ips'))
 

@@ -2172,7 +2172,8 @@ def _volume_get_query(context, session=None):
 
 @require_context
 def volume_get(context, volume_id, session=None):
-    query = _volume_get_query(context).filter_by(id=volume_id)
+    query = _volume_get_query(context, session=session).\
+                    filter_by(id=volume_id)
 
     if is_user_context(context):
         # TODO(sirp): filtering by project if is_user_context is a common

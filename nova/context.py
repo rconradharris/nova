@@ -18,6 +18,7 @@
 #    under the License.
 
 """RequestContext: context for requests that persist through all of nova."""
+
 import copy
 import uuid
 

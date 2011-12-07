@@ -794,6 +794,8 @@ def fixed_ip_get(context, id, session=None):
     if not result:
         raise exception.FixedIpNotFound(id=id)
 
+    # FIXME(sirp): shouldn't we just use project_only here to restrict the
+    # results?
     if is_user_context(context):
         authorize_project_context(context, result.instance.project_id)
 
@@ -839,6 +841,8 @@ def fixed_ip_get_by_address(context, address, session=None):
     if not result:
         raise exception.FixedIpNotFoundForAddress(address=address)
 
+    # NOTE(sirp): shouldn't we just use project_only here to restrict the
+    # results?
     if is_user_context(context):
         authorize_project_context(context, result.instance.project_id)
 
@@ -1176,7 +1180,8 @@ def instance_get(context, instance_id, session=None):
 
 @require_context
 def _build_instance_get(context, session=None):
-    query = model_query(context, models.Instance, session=session).\
+    return model_query(context, models.Instance, session=session,
+                        project_only=True).\
             options(joinedload_all('fixed_ips.floating_ips')).\
             options(joinedload_all('fixed_ips.network')).\
             options(joinedload_all('fixed_ips.virtual_interface')).\
@@ -1184,11 +1189,6 @@ def _build_instance_get(context, session=None):
             options(joinedload('volumes')).\
             options(joinedload('metadata')).\
             options(joinedload('instance_type'))
-
-    if is_user_context(context):
-        query = query.filter_by(project_id=context.project_id)
-
-    return query
 
 
 @require_admin_context
@@ -1359,8 +1359,8 @@ def instance_get_active_by_window_joined(context, begin, end=None,
 
 
 @require_admin_context
-def _instance_get_all_query(context):
-    return model_query(context, models.Instance).\
+def _instance_get_all_query(context, project_only=False):
+    return model_query(context, models.Instance, project_only=project_only).\
                    options(joinedload_all('fixed_ips.floating_ips')).\
                    options(joinedload('security_groups')).\
                    options(joinedload_all('fixed_ips.network')).\
@@ -1388,13 +1388,9 @@ def instance_get_all_by_project(context, project_id):
 
 @require_context
 def instance_get_all_by_reservation(context, reservation_id):
-    query = _instance_get_all_query(context).\
-                    filter_by(reservation_id=reservation_id)
-
-    if is_user_context(context):
-        query = query.filter_by(project_id=context.project_id)
-
-    return query.all()
+    return _instance_get_all_query(context, project_only=True).\
+                    filter_by(reservation_id=reservation_id).\
+                    all()
 
 
 @require_admin_context
@@ -1732,13 +1728,10 @@ def network_disassociate_all(context):
 
 @require_context
 def network_get(context, network_id, session=None):
-    query = model_query(context, models.Network, session=session).\
-                         filter_by(id=network_id)
-
-    if is_user_context(context):
-        query = query.filter_by(project_id=context.project_id)
-
-    result = query.first()
+    result = model_query(context, models.Network, session=session,
+                         project_only=True).\
+                    filter_by(id=network_id).\
+                    first()
 
     if not result:
         raise exception.NetworkNotFound(network_id=network_id)
@@ -2479,9 +2472,10 @@ def block_device_mapping_destroy_by_instance_and_volume(context, instance_id,
 
 ###################
 
-def _security_group_get_query(context, session=None, read_deleted=None):
+def _security_group_get_query(context, session=None, read_deleted=None,
+                              project_only=False):
     return model_query(context, models.SecurityGroup, session=session,
-                       read_deleted=read_deleted).\
+                       read_deleted=read_deleted, project_only=project_only).\
                    options(joinedload_all('rules'))
 
 
@@ -2492,14 +2486,11 @@ def security_group_get_all(context):
 
 @require_context
 def security_group_get(context, security_group_id, session=None):
-    query = _security_group_get_query(context, session=session).\
-                         filter_by(id=security_group_id).\
-                         options(joinedload_all('instances'))
-
-    if is_user_context(context):
-        query = query.filter_by(project_id=context.project_id)
-
-    result = query.first()
+    result = _security_group_get_query(context, session=session,
+                                       project_only=True).\
+                    filter_by(id=security_group_id).\
+                    options(joinedload_all('instances')).\
+                    first()
 
     if not result:
         raise exception.SecurityGroupNotFound(
@@ -3689,8 +3680,9 @@ def volume_type_extra_specs_update_or_create(context, volume_type_id,
 ####################
 
 
-def _vsa_get_query(context, session=None):
-    return model_query(context, models.VirtualStorageArray, session=session).\
+def _vsa_get_query(context, session=None, project_only=False):
+    return model_query(context, models.VirtualStorageArray, session=session,
+                       project_only=project_only).\
                          options(joinedload('vsa_instance_type'))
 
 
@@ -3740,12 +3732,9 @@ def vsa_get(context, vsa_id, session=None):
     """
     Get Virtual Storage Array record by ID.
     """
-    query = _vsa_get_query(context, session=session).filter_by(id=vsa_id)
-
-    if is_user_context(context):
-        query = query.filter_by(project_id=context.project_id)
-
-    result = query.first()
+    result = _vsa_get_query(context, session=session, project_only=True).\
+                filter_by(id=vsa_id).\
+                first()
 
     if not result:
         raise exception.VirtualStorageArrayNotFound(id=vsa_id)

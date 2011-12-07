@@ -1814,8 +1814,8 @@ def network_get_associated_fixed_ips(context, network_id):
 
 
 @require_admin_context
-def _network_get_query(context):
-    return model_query(context, models.Network,
+def _network_get_query(context, session=None):
+    return model_query(context, models.Network, session=session,
                        deleted_visibility="not_visible")
 
 
@@ -1896,7 +1896,7 @@ def network_get_all_by_host(context, host):
 def network_set_host(context, network_id, host_id):
     session = get_session()
     with session.begin():
-        network_ref = _network_get_query(context).\
+        network_ref = _network_get_query(context, session=session).\
                               filter_by(id=network_id).\
                               with_lockmode('update').\
                               first()

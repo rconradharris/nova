@@ -1571,7 +1571,7 @@ class CloudTestCase(test.TestCase):
         db.volume_destroy(self.context, vol1['id'])
 
         admin_ctxt = context.get_admin_context(
-                read_deleted="only_deleted")
+                read_deleted="only")
         vol = db.volume_get(admin_ctxt, vol2['id'])
         self.assertTrue(vol['deleted'])
 
@@ -1699,7 +1699,7 @@ class CloudTestCase(test.TestCase):
         db.volume_destroy(self.context, vol1_id)
 
         admin_ctxt = context.get_admin_context(
-                read_deleted="only_deleted")
+                read_deleted="only")
         vol = db.volume_get(admin_ctxt, vol2_id)
         self.assertTrue(vol['deleted'])
 

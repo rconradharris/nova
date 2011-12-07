@@ -155,7 +155,7 @@ def model_query(context, *args, **kwargs):
         query = query.filter_by(deleted=False)
     elif read_deleted == 'visible':
         pass  # omit the filter to include deleted and active
-    elif read_deleted == 'only_deleted':
+    elif read_deleted == 'only':
         query = query.filter_by(deleted=True)
     else:
         raise Exception("Unrecognized read_deleted value '%s'"

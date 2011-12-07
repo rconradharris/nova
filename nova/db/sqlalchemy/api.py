@@ -151,7 +151,7 @@ def model_query(context, *args, **kwargs):
     if read_deleted is None:
         read_deleted = context.read_deleted
 
-    if read_deleted == 'not_visible':
+    if read_deleted == 'no':
         query = query.filter_by(deleted=False)
     elif read_deleted == 'visible':
         pass  # omit the filter to include deleted and active
@@ -204,7 +204,7 @@ def service_get_all(context, disabled=None):
 @require_admin_context
 def service_get_all_by_topic(context, topic):
     query = model_query(context, models.Service,
-                        read_deleted="not_visible")
+                        read_deleted="no")
     return query.filter_by(disabled=False).\
                  filter_by(topic=topic).\
                  all()
@@ -213,7 +213,7 @@ def service_get_all_by_topic(context, topic):
 @require_admin_context
 def service_get_by_host_and_topic(context, host, topic):
     query = model_query(context, models.Service,
-                        read_deleted="not_visible")
+                        read_deleted="no")
     return query.filter_by(disabled=False).\
                  filter_by(host=host).\
                  filter_by(topic=topic).\
@@ -223,14 +223,14 @@ def service_get_by_host_and_topic(context, host, topic):
 @require_admin_context
 def service_get_all_by_host(context, host):
     query = model_query(context, models.Service,
-                        read_deleted="not_visible")
+                        read_deleted="no")
     return query.filter_by(host=host).all()
 
 
 @require_admin_context
 def service_get_all_compute_by_host(context, host):
     query = model_query(context, models.Service,
-                        read_deleted="not_visible")
+                        read_deleted="no")
     result = query.options(joinedload('compute_node')).\
                    filter_by(host=host).\
                    filter_by(topic="compute").\
@@ -245,7 +245,7 @@ def service_get_all_compute_by_host(context, host):
 def _service_get_all_topic_subquery(context, session, topic, subq, label):
     sort_value = getattr(subq.c, label)
     query = model_query(context, models.Service, func.coalesce(sort_value, 0),
-                        read_deleted="not_visible", session=session)
+                        read_deleted="no", session=session)
     return query.filter_by(topic=topic).\
                  filter_by(disabled=False).\
                  outerjoin((subq, models.Service.host == subq.c.host)).\
@@ -269,7 +269,7 @@ def service_get_all_compute_sorted(context):
         subq = model_query(context, models.Instance.host,
                            func.sum(models.Instance.vcpus).label(label),
                            session=session,
-                           read_deleted="not_visible").\
+                           read_deleted="no").\
                        group_by(models.Instance.host).\
                        subquery()
         return _service_get_all_topic_subquery(context,
@@ -288,7 +288,7 @@ def service_get_all_network_sorted(context):
         subq = model_query(context, models.Network.host,
                            func.count(models.Network.id).label(label),
                            session=session,
-                           read_deleted="not_visible").\
+                           read_deleted="no").\
                        group_by(models.Network.host).\
                        subquery()
         return _service_get_all_topic_subquery(context,
@@ -307,7 +307,7 @@ def service_get_all_volume_sorted(context):
         subq = model_query(context, models.Volume.host,
                            func.sum(models.Volume.size).label(label),
                            session=session,
-                           read_deleted="not_visible").\
+                           read_deleted="no").\
                        group_by(models.Volume.host).\
                        subquery()
         return _service_get_all_topic_subquery(context,
@@ -423,7 +423,7 @@ def certificate_destroy(context, certificate_id):
 @require_admin_context
 def certificate_get_all_by_project(context, project_id):
     return model_query(context, models.Certificate,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                    filter_by(project_id=project_id).\
                    all()
 
@@ -431,7 +431,7 @@ def certificate_get_all_by_project(context, project_id):
 @require_admin_context
 def certificate_get_all_by_user(context, user_id):
     return model_query(context, models.Certificate,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                    filter_by(user_id=user_id).\
                    all()
 
@@ -439,7 +439,7 @@ def certificate_get_all_by_user(context, user_id):
 @require_admin_context
 def certificate_get_all_by_user_and_project(context, user_id, project_id):
     return model_query(context, models.Certificate,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                    filter_by(user_id=user_id).\
                    filter_by(project_id=project_id).\
                    all()
@@ -485,7 +485,7 @@ def floating_ip_allocate_address(context, project_id):
     with session.begin():
         floating_ip_ref = model_query(context, models.FloatingIp,
                                       session=session,
-                                      read_deleted="not_visible").\
+                                      read_deleted="no").\
                                   filter_by(fixed_ip_id=None).\
                                   filter_by(project_id=None).\
                                   with_lockmode('update').\
@@ -512,7 +512,7 @@ def floating_ip_count_by_project(context, project_id):
     authorize_project_context(context, project_id)
     # TODO(tr3buchet): why leave auto_assigned floating IPs out?
     return model_query(context, models.FloatingIp,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                    filter_by(project_id=project_id).\
                    filter_by(auto_assigned=False).\
                    count()
@@ -589,7 +589,7 @@ def floating_ip_set_auto_assigned(context, address):
 @require_admin_context
 def _floating_ip_get_all(context):
     return model_query(context, models.FloatingIp,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                options(joinedload_all('fixed_ip.instance'))
 
 
@@ -680,7 +680,7 @@ def fixed_ip_associate(context, address, instance_id, network_id=None,
         network_or_none = or_(models.FixedIp.network_id == network_id,
                               models.FixedIp.network_id == None)
         fixed_ip_ref = model_query(context, models.FixedIp, session=session,
-                                   read_deleted="not_visible").\
+                                   read_deleted="no").\
                                filter(network_or_none).\
                                filter_by(reserved=reserved).\
                                filter_by(address=address).\
@@ -712,7 +712,7 @@ def fixed_ip_associate_pool(context, network_id, instance_id=None, host=None):
         network_or_none = or_(models.FixedIp.network_id == network_id,
                               models.FixedIp.network_id == None)
         fixed_ip_ref = model_query(context, models.FixedIp, session=session,
-                                   read_deleted="not_visible").\
+                                   read_deleted="no").\
                                filter(network_or_none).\
                                filter_by(reserved=False).\
                                filter_by(instance=None).\
@@ -851,7 +851,7 @@ def fixed_ip_get_by_address(context, address, session=None):
 @require_context
 def fixed_ip_get_by_instance(context, instance_id):
     result = model_query(context, models.FixedIp,
-                         read_deleted="not_visible").\
+                         read_deleted="no").\
                  options(joinedload('floating_ips')).\
                  filter_by(instance_id=instance_id).\
                  all()
@@ -865,7 +865,7 @@ def fixed_ip_get_by_instance(context, instance_id):
 @require_context
 def fixed_ip_get_by_network_host(context, network_id, host):
     result = model_query(context, models.FixedIp,
-                         read_deleted="not_visible").\
+                         read_deleted="no").\
                  filter_by(network_id=network_id).\
                  filter_by(host=host).\
                  first()
@@ -879,7 +879,7 @@ def fixed_ip_get_by_network_host(context, network_id, host):
 @require_context
 def fixed_ip_get_by_virtual_interface(context, vif_id):
     result = model_query(context, models.FixedIp,
-                         read_deleted="not_visible").\
+                         read_deleted="no").\
                  options(joinedload('floating_ips')).\
                  filter_by(virtual_interface_id=vif_id).\
                  all()
@@ -1103,7 +1103,7 @@ def instance_data_get_for_project(context, project_id):
                          func.count(models.Instance.id),
                          func.sum(models.Instance.vcpus),
                          func.sum(models.Instance.memory_mb),
-                         read_deleted="not_visible").\
+                         read_deleted="no").\
                      filter_by(project_id=project_id).\
                      first()
     # NOTE(vish): convert None to 0
@@ -1610,7 +1610,7 @@ def key_pair_get(context, user_id, name, session=None):
 def key_pair_get_all_by_user(context, user_id):
     authorize_user_context(context, user_id)
     return model_query(context, models.KeyPair,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                    filter_by(user_id=user_id).\
                    all()
 
@@ -1639,7 +1639,7 @@ def network_associate(context, project_id, force=False):
 
         def network_query(project_filter):
             return model_query(context, models.Network, session=session,
-                              read_deleted="not_visible").\
+                              read_deleted="no").\
                            filter_by(project_id=project_filter).\
                            with_lockmode('update').\
                            first()
@@ -1673,7 +1673,7 @@ def network_count(context):
 @require_admin_context
 def _network_ips_query(context, network_id):
     return model_query(context, models.FixedIp,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                    filter_by(network_id=network_id)
 
 
@@ -1752,7 +1752,7 @@ def network_get(context, network_id, session=None):
 @require_admin_context
 def network_get_all(context):
     result = model_query(context, models.Network,
-                         read_deleted="not_visible").all()
+                         read_deleted="no").all()
 
     if not result:
         raise exception.NoNetworksFound()
@@ -1765,7 +1765,7 @@ def network_get_all_by_uuids(context, network_uuids, project_id=None):
     project_or_none = or_(models.Network.project_id == project_id,
                           models.Network.project_id == None)
     result = model_query(context, models.Network,
-                         read_deleted="not_visible").\
+                         read_deleted="no").\
                 filter(models.Network.uuid.in_(network_uuids)).\
                 filter(project_or_none).\
                 all()
@@ -1805,7 +1805,7 @@ def network_get_associated_fixed_ips(context, network_id):
     # FIXME(sirp): since this returns fixed_ips, this would be better named
     # fixed_ip_get_all_by_network.
     return model_query(context, models.FixedIp,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                     options(joinedload_all('instance')).\
                     filter_by(network_id=network_id).\
                     filter(models.FixedIp.instance_id != None).\
@@ -1816,7 +1816,7 @@ def network_get_associated_fixed_ips(context, network_id):
 @require_admin_context
 def _network_get_query(context, session=None):
     return model_query(context, models.Network, session=session,
-                       read_deleted="not_visible")
+                       read_deleted="no")
 
 
 @require_admin_context
@@ -1999,7 +1999,7 @@ def auth_token_create(context, token):
 @require_context
 def quota_get(context, project_id, resource, session=None):
     result = model_query(context, models.Quota, session=session,
-                         read_deleted="not_visible").\
+                         read_deleted="no").\
                      filter_by(project_id=project_id).\
                      filter_by(resource=resource).\
                      first()
@@ -2015,7 +2015,7 @@ def quota_get_all_by_project(context, project_id):
     authorize_project_context(context, project_id)
 
     rows = model_query(context, models.Quota,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                    filter_by(project_id=project_id).\
                    all()
 
@@ -2058,7 +2058,7 @@ def quota_destroy_all_by_project(context, project_id):
     session = get_session()
     with session.begin():
         quotas = model_query(context, models.Quota, session=session,
-                             read_deleted="not_visible").\
+                             read_deleted="no").\
                          filter_by(project_id=project_id).\
                          all()
 
@@ -2075,7 +2075,7 @@ def volume_allocate_iscsi_target(context, volume_id, host):
     with session.begin():
         iscsi_target_ref = model_query(context, models.IscsiTarget,
                                        session=session,
-                                       read_deleted="not_visible").\
+                                       read_deleted="no").\
                                 filter_by(volume=None).\
                                 filter_by(host=host).\
                                 with_lockmode('update').\
@@ -2123,7 +2123,7 @@ def volume_data_get_for_project(context, project_id):
     result = model_query(context,
                          func.count(models.Volume.id),
                          func.sum(models.Volume.size),
-                         read_deleted="not_visible").\
+                         read_deleted="no").\
                      filter_by(project_id=project_id).\
                      first()
 
@@ -2202,7 +2202,7 @@ def volume_get_all_by_host(context, host):
 @require_admin_context
 def volume_get_all_by_instance(context, instance_id):
     result = model_query(context, models.Volume,
-                         read_deleted="not_visible").\
+                         read_deleted="no").\
                      options(joinedload('volume_metadata')).\
                      options(joinedload('volume_type')).\
                      filter_by(instance_id=instance_id).\
@@ -2413,7 +2413,7 @@ def snapshot_update(context, snapshot_id, values):
 
 def _block_device_mapping_get_query(context, session=None):
     return model_query(context, models.BlockDeviceMapping, session=session,
-                       read_deleted="not_visible")
+                       read_deleted="no")
 
 
 @require_context
@@ -2530,7 +2530,7 @@ def security_group_get(context, security_group_id, session=None):
 @require_context
 def security_group_get_by_name(context, project_id, group_name):
     result = _security_group_get_query(
-                    context, read_deleted="not_visible").\
+                    context, read_deleted="no").\
                         filter_by(project_id=project_id).\
                         filter_by(name=group_name).\
                         options(joinedload_all('instances')).\
@@ -2546,7 +2546,7 @@ def security_group_get_by_name(context, project_id, group_name):
 @require_context
 def security_group_get_by_project(context, project_id):
     return _security_group_get_query(
-                    context, read_deleted="not_visible").\
+                    context, read_deleted="no").\
                         filter_by(project_id=project_id).\
                         all()
 
@@ -2554,7 +2554,7 @@ def security_group_get_by_project(context, project_id):
 @require_context
 def security_group_get_by_instance(context, instance_id):
     return _security_group_get_query(
-                    context, read_deleted="not_visible").\
+                    context, read_deleted="no").\
                    join(models.SecurityGroup.instances).\
                    filter_by(id=instance_id).\
                    all()
@@ -2850,7 +2850,7 @@ def project_add_member(context, project_id, user_id):
 
 def project_get(context, id, session=None):
     result = model_query(context, models.Project, session=session,
-                         read_deleted="not_visible").\
+                         read_deleted="no").\
                      filter_by(id=id).\
                      options(joinedload_all('members')).\
                      first()
@@ -2916,7 +2916,7 @@ def project_get_networks(context, project_id, associate=True):
     # a project with a network if it doesn't have one and
     # associate is true
     result = model_query(context, models.Network,
-                         read_deleted="not_visible").\
+                         read_deleted="no").\
                      filter_by(project_id=project_id).\
                      all()
 
@@ -3007,7 +3007,7 @@ def console_pool_create(context, values):
 
 def console_pool_get(context, pool_id):
     result = model_query(context, models.ConsolePool,
-                         read_deleted="not_visible").\
+                         read_deleted="no").\
                      filter_by(id=pool_id).\
                      first()
 
@@ -3021,7 +3021,7 @@ def console_pool_get_by_host_type(context, compute_host, host,
                                   console_type):
 
     result = model_query(context, models.ConsolePool,
-                         read_deleted="not_visible").\
+                         read_deleted="no").\
                    filter_by(host=host).\
                    filter_by(console_type=console_type).\
                    filter_by(compute_host=compute_host).\
@@ -3038,7 +3038,7 @@ def console_pool_get_by_host_type(context, compute_host, host,
 
 def console_pool_get_all_by_host_type(context, host, console_type):
     return model_query(context, models.ConsolePool,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                    filter_by(host=host).\
                    filter_by(console_type=console_type).\
                    options(joinedload('consoles')).\
@@ -3164,7 +3164,7 @@ def instance_type_get_all(context, inactive=False, filters=None):
     Returns all instance types.
     """
     filters = filters or {}
-    read_deleted = "visible" if inactive else "not_visible"
+    read_deleted = "visible" if inactive else "no"
     query = _instance_type_get_query(
             context, read_deleted=read_deleted)
 
@@ -3308,7 +3308,7 @@ def zone_get_all(context):
 
 def _instance_metadata_get_query(context, instance_id, session=None):
     return model_query(context, models.InstanceMetadata, session=session,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                     filter_by(instance_id=instance_id)
 
 
@@ -3409,7 +3409,7 @@ def agent_build_create(context, values):
 def agent_build_get_by_triple(context, hypervisor, os, architecture,
                               session=None):
     return model_query(context, models.AgentBuild, session=session,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                    filter_by(hypervisor=hypervisor).\
                    filter_by(os=os).\
                    filter_by(architecture=architecture).\
@@ -3419,7 +3419,7 @@ def agent_build_get_by_triple(context, hypervisor, os, architecture,
 @require_admin_context
 def agent_build_get_all(context):
     return model_query(context, models.AgentBuild,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                    all()
 
 
@@ -3497,7 +3497,7 @@ def _instance_type_extra_specs_get_query(context, instance_type_id,
                                          session=None):
     return model_query(context, models.InstanceTypeExtraSpecs,
                        session=session,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                     filter_by(instance_type_id=instance_type_id)
 
 
@@ -3588,7 +3588,7 @@ def volume_type_get_all(context, inactive=False, filters=None):
     """
     filters = filters or {}
 
-    read_deleted = "visible" if inactive else "not_visible"
+    read_deleted = "visible" if inactive else "no"
     rows = model_query(context, models.VolumeTypes,
                        read_deleted=read_deleted).\
                         options(joinedload('extra_specs')).\
@@ -3669,7 +3669,7 @@ def volume_type_purge(context, name):
 
 def _volume_type_extra_specs_query(context, volume_type_id, session=None):
     return model_query(context, models.VolumeTypeExtraSpecs, session=session,
-                       read_deleted="not_visible").\
+                       read_deleted="no").\
                     filter_by(volume_type_id=volume_type_id)
 
 

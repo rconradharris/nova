@@ -1565,7 +1565,7 @@ class CloudTestCase(test.TestCase):
         self.cloud.terminate_instances(self.context, [ec2_instance_id])
 
         admin_ctxt = context.get_admin_context(
-                read_deleted="not_visible")
+                read_deleted="no")
         vol = db.volume_get(admin_ctxt, vol1['id'])
         self.assertFalse(vol['deleted'])
         db.volume_destroy(self.context, vol1['id'])
@@ -1692,7 +1692,7 @@ class CloudTestCase(test.TestCase):
         self.cloud.terminate_instances(self.context, [ec2_instance_id])
 
         admin_ctxt = context.get_admin_context(
-                read_deleted="not_visible")
+                read_deleted="no")
         vol = db.volume_get(admin_ctxt, vol1_id)
         self._assert_volume_detached(vol)
         self.assertFalse(vol['deleted'])

@@ -33,7 +33,7 @@ class RequestContext(object):
     """
 
     def __init__(self, user_id, project_id, is_admin=None,
-                 read_deleted="not_visible", roles=None,
+                 read_deleted="no", roles=None,
                  remote_address=None, timestamp=None, request_id=None,
                  auth_token=None, strategy='noauth'):
         self.user_id = user_id
@@ -83,7 +83,7 @@ class RequestContext(object):
         return context
 
 
-def get_admin_context(read_deleted="not_visible"):
+def get_admin_context(read_deleted="no"):
     return RequestContext(user_id=None,
                           project_id=None,
                           is_admin=True,

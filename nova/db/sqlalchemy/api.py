@@ -467,15 +467,11 @@ def certificate_update(context, certificate_id, values):
 
 @require_context
 def floating_ip_get(context, id):
-    query = model_query(context, models.FloatingIp).\
+    result = model_query(context, models.FloatingIp, project_only=True).\
                  options(joinedload('fixed_ip')).\
                  options(joinedload_all('fixed_ip.instance')).\
-                 filter_by(id=id)
-
-    if is_user_context(context):
-        query = query.filter_by(project_id=context.project_id)
-
-    result = query.first()
+                 filter_by(id=id).\
+                 first()
 
     if not result:
         raise exception.FloatingIpNotFound(id=id)
@@ -2360,13 +2356,11 @@ def snapshot_destroy(context, snapshot_id):
 
 @require_context
 def snapshot_get(context, snapshot_id, session=None):
-    query = model_query(context, models.Snapshot, session=session).\
-                filter_by(id=snapshot_id)
+    result = model_query(context, models.Snapshot, session=session,
+                         project_only=True).\
+                filter_by(id=snapshot_id).\
+                first()
 
-    if is_user_context(context):
-        query = query.filter_by(project_id=context.project_id)
-
-    result = query.first()
     if not result:
         raise exception.SnapshotNotFound(snapshot_id=snapshot_id)
 

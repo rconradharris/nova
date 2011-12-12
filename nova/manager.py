@@ -56,6 +56,7 @@ This module provides Manager, a base class for managers.
 from nova import flags
 from nova import log as logging
 from nova import utils
+from nova import version
 from nova.db import base
 from nova.scheduler import api
 
@@ -167,6 +168,15 @@ class Manager(base.Base):
         """
         pass
 
+    def service_version(self, context):
+        return version.version_string()
+
+    def service_config(self, context):
+        config = {}
+        for key in FLAGS:
+            config[key] = FLAGS.get(key, None)
+        return config
+ 
 
 class SchedulerDependentManager(Manager):
     """Periodically send capability updates to the Scheduler services.

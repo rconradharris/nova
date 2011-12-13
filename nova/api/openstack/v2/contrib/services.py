@@ -52,21 +52,6 @@ def _build_service(base_url, service):
     return service_info
 
 
-def _build_compute_service(req, base_url, service, compute_node, instances):
-    compute_info = _build_service(base_url, service)
-
-    # add in compute node info
-    for attr in COMPUTE_NODE_ATTRS:
-        compute_info[attr] = compute_node[attr]
-
-    # computed attributes
-    compute_info['memory_mb_used_servers'] = sum(
-        inst['memory_mb'] for inst in instances
-        if inst['vm_state'] == 'active')
-
-    return compute_info
-
-
 class ServicesController(object):
     """The Service API controller for the OpenStack API."""
 
@@ -90,17 +75,31 @@ class ServicesController(object):
     def show(self, req, id):
         context = req.environ['nova.context']
         service = self._safe_service_get(context, id)
+        return {'service': _build_service(req.application_url, service)}
 
-        if service['topic'] == 'compute':
+    def details(self, req, id):
+        """Return service_type specific information for a service.
+
+        For a 'compute' service, this will include used memory.
+        """
+        context = req.environ['nova.context']
+        service = self._safe_service_get(context, id)
+
+        details = {}
+
+        topic = service['topic']
+        if topic == 'compute':
             compute_node = db.compute_node_get_for_service(
                     context, service['id'])
-            instances = db.instance_get_all_by_host(context, service['host'])
-            details = _build_compute_service(
-                req, req.application_url, service, compute_node, instances)
-        else:
-            details = _build_service(req.application_url, service)
+            for attr in COMPUTE_NODE_ATTRS:
+                details[attr] = compute_node[attr]
 
-        return {'service': details}
+            instances = db.instance_get_all_by_host(context, service['host'])
+            details['memory_mb_used_servers'] = sum(
+                inst['memory_mb'] for inst in instances
+                if inst['vm_state'] == 'active')
+
+        return {'details': details}
 
     @classmethod
     def _call_method_for_service(cls, req, id, method):
@@ -140,10 +139,10 @@ class Services(extensions.ExtensionDescriptor):
         service = extensions.ResourceExtension('services',
                     ServicesController(),
                     serializer=serializer,
-                    member_actions={'version': 'GET',
-                                    'config': 'GET',
-                                    'servers': 'GET'})
-
+                    member_actions={'config': 'GET',
+                                    'details': 'GET',
+                                    'servers': 'GET',
+                                    'version': 'GET'})
         return [service]
 
 
@@ -160,19 +159,17 @@ class ServicesTemplate(xmlutil.TemplateBuilder):
         return xmlutil.MasterTemplate(root, 1, nsmap=nsmap)
 
 
+def add_attr_elements(root, attrs):
+    for attr in attrs:
+        elem = xmlutil.SubTemplateElement(root, attr)
+        elem.text = attr
+
+
 class ServiceTemplate(xmlutil.TemplateBuilder):
     def construct(self):
         root = xmlutil.TemplateElement('service', selector='service')
-
-        def add_elem(attr):
-            elem = xmlutil.SubTemplateElement(root, attr)
-            elem.text = attr
-
-        for attr in SERVICE_DB_ATTRS:
-            add_elem(attr)
-
-        add_elem('href')
-        add_elem('memory_mb_used_servers')
+        attrs = SERVICE_DB_ATTRS + ['href']
+        add_attr_elements(root, attrs)
         return xmlutil.MasterTemplate(root, 1, nsmap=nsmap)
 
 
@@ -198,12 +195,23 @@ class ConfigTemplate(xmlutil.TemplateBuilder):
         return xmlutil.MasterTemplate(root, 1, nsmap=nsmap)
 
 
+class DetailsTemplate(xmlutil.TemplateBuilder):
+    def construct(self):
+        root = xmlutil.TemplateElement('details', selector='details')
+        attrs = COMPUTE_NODE_ATTRS + ['memory_mb_used_servers']
+        add_attr_elements(root, attrs)
+        return xmlutil.MasterTemplate(root, 1, nsmap=nsmap)
+
+
 class ServiceXMLSerializer(xmlutil.XMLTemplateSerializer):
     def index(self):
         return ServicesTemplate()
 
     def show(self):
         return ServiceTemplate()
+
+    def details(self):
+        return DetailsTemplate()
 
     def version(self):
         return VersionTemplate()

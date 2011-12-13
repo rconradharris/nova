@@ -55,6 +55,8 @@ class ProjectTestCase(test.TestCase):
                     continue
                 if "jenkins" in email and "openstack.org" in email:
                     continue
+                if "lists.rackspace.com" in email:
+                    continue
                 email = '<' + email.lower() + '>'
                 contributors.add(utils.str_dict_replace(email, mailmap))
         else:

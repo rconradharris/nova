@@ -1391,3 +1391,11 @@ def _showwarning(message, category, filename, lineno, file=None, line=None):
 
 # Install our warnings handler
 warnings.showwarning = _showwarning
+
+
+def name_label_to_instance_id(name_label):
+    """Return an instance integer ID given an Instance.name value."""
+    parts = name_label.split('-')
+    hex_id = parts[1]
+    decimal_id = int(hex_id, 16)
+    return decimal_id

@@ -645,3 +645,17 @@ class DeprecationTest(test.TestCase):
 
         # Make sure that did *not* generate a warning
         self.assertEqual(self.warn, None)
+
+
+class NameLabelToInstanceIDTest(test.TestCase):
+    """Tests utils.name_label_to_id."""
+
+    def test_name_label_without_suffix(self):
+        name_label = "instance-00000073"
+        instance_id = utils.name_label_to_instance_id(name_label)
+        self.assertEqual(instance_id, 115)
+
+    def test_name_label_with_suffix(self):
+        name_label = "instance-00000073-orig"
+        instance_id = utils.name_label_to_instance_id(name_label)
+        self.assertEqual(instance_id, 115)

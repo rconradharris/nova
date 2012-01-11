@@ -2097,13 +2097,15 @@ class ComputeManager(manager.SchedulerDependentManager):
         if action == "noop":
             return
 
-        present_name_labels = set(self.driver.list_instances())
+        name_labels = self.driver.list_instances()
+        present_instance_ids = set(
+                utils.name_label_to_instance_id(x) for x in name_labels)
 
         # NOTE(sirp): admin contexts don't ordinarily return deleted records
         with utils.temporary_mutation(context, read_deleted="yes"):
             instances = self.db.instance_get_all_by_host(context, self.host)
             for instance in instances:
-                present = instance.name in present_name_labels
+                present = instance.id in present_instance_ids
                 erroneously_running = instance.deleted and present
                 old_enough = (not instance.deleted_at or utils.is_older_than(
                         instance.deleted_at,

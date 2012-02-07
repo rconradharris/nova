@@ -423,6 +423,7 @@ class VMHelper(xenapi.HelperBase):
                   'glance_port': glance_port,
                   'sr_path': cls.get_sr_path(session),
                   'auth_token': getattr(context, 'auth_token', None),
+                  'project_id': context.project_id,
                   'properties': properties}
 
         kwargs = {'params': pickle.dumps(params)}
@@ -704,7 +705,8 @@ class VMHelper(xenapi.HelperBase):
                       'uuid_stack': uuid_stack,
                       'sr_path': cls.get_sr_path(session),
                       'num_retries': 0,
-                      'auth_token': getattr(context, 'auth_token', None)}
+                      'auth_token': getattr(context, 'auth_token', None),
+                      'project_id': context.project_id}
             kwargs = {'params': pickle.dumps(params)}
 
             LOG.info(_('download_vhd %(image)s '

@@ -664,6 +664,7 @@ def upload_image(context, session, instance, vdi_uuids, image_id):
               'glance_use_ssl': glance_use_ssl,
               'sr_path': get_sr_path(session),
               'auth_token': getattr(context, 'auth_token', None),
+              'project_id': context.project_id,
               'properties': properties}
 
     session.call_plugin_serialized('glance', 'upload_vhd', **params)
@@ -998,6 +999,7 @@ def _fetch_vhd_image(context, session, instance, image_id):
     params = {'image_id': image_id,
               'uuid_stack': _make_uuid_stack(),
               'sr_path': get_sr_path(session),
+              'project_id': context.project_id,
               'auth_token': getattr(context, 'auth_token', None)}
 
     glance_api_servers = glance.get_api_servers()

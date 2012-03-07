@@ -343,7 +343,6 @@ class ComputeManager(manager.SchedulerDependentManager):
                                       'resume guests'), instance=instance)
 
                 elif drv_state == power_state.RUNNING:
-                    # VMWareAPI drivers will raise an exception
                     try:
                         self.driver.ensure_filtering_rules_for_instance(
                                                instance,

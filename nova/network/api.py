@@ -19,15 +19,35 @@
 
 import functools
 import inspect
+import time
 
 from nova.db import base
 from nova import flags
 from nova.network import model as network_model
+from nova.openstack.common import cfg
 from nova.openstack.common import log as logging
 from nova.openstack.common import rpc
+from nova.openstack.common.rpc import common as rpc_common
 
+network_api_opts = [
+        cfg.IntOpt("get_nwinfo_timeout_retries",
+                default=5,
+                help="How many times to retry get_nwinfo on timeouts"),
+        cfg.IntOpt("get_nwinfo_timeout_retry_delay",
+                default=2,
+                help="Delay in seconds before retrying get_nwinfo on "
+                        "timeouts"),
+        cfg.IntOpt("get_nwinfo_error_retries",
+                default=2,
+                help="How many times to retry get_nwinfo on errors"),
+        cfg.IntOpt("get_nwinfo_error_retry_delay",
+                default=2,
+                help="Delay in seconds before retrying get_nwinfo on "
+                        "errors"),
+]
 
 FLAGS = flags.FLAGS
+FLAGS.register_opts(network_api_opts)
 LOG = logging.getLogger(__name__)
 
 
@@ -106,6 +126,13 @@ class API(base.Base):
                         {'method': 'delete_network',
                          'args': {'fixed_range': None,
                                   'uuid': network_uuid}})
+
+    def create(self, context, label, cidr):
+        return rpc.call(context,
+                        FLAGS.network_topic,
+                        {'method': 'create_networks',
+                         'args': {'label': label,
+                                  'cidr': cidr}})
 
     def disassociate(self, context, network_uuid):
         return rpc.call(context,
@@ -254,6 +281,7 @@ class API(base.Base):
         """Deallocates all network structures related to instance."""
         args = kwargs
         args['instance_id'] = instance['id']
+        args['instance_uuid'] = instance['uuid']
         args['project_id'] = instance['project_id']
         args['host'] = instance['host']
         rpc.call(context, FLAGS.network_topic,
@@ -298,9 +326,32 @@ class API(base.Base):
                 'rxtx_factor': instance['instance_type']['rxtx_factor'],
                 'host': instance['host'],
                 'project_id': instance['project_id']}
-        nw_info = rpc.call(context, FLAGS.network_topic,
-                           {'method': 'get_instance_nw_info',
-                            'args': args})
+
+        num_tries = 1 + max(FLAGS.get_nwinfo_timeout_retries,
+            FLAGS.get_nwinfo_error_retries)
+        for i in xrange(num_tries):
+            try:
+                nw_info = rpc.call(context, FLAGS.network_topic,
+                        {'method': 'get_instance_nw_info',
+                         'args': args})
+                break
+            except rpc_common.Timeout, e:
+                tries_left = num_tries - i - 1
+                if not tries_left:
+                    raise
+                sleep_time = (i + 1) * FLAGS.get_nwinfo_timeout_retry_delay
+                LOG.error(_("Timeout getting nw_info: %(e)s: "
+                        "%(tries_left)s retry/retries left.  Next "
+                        "retry in %(sleep_time)d second(s)") % locals())
+            except Exception, e:
+                tries_left = num_tries - i - 1
+                if not tries_left:
+                    raise
+                sleep_time = (i + 1) * FLAGS.get_nwinfo_error_retry_delay
+                LOG.error(_("Error getting nw_info: %(e)s: "
+                        "%(tries_left)s retry/retries left.  Next "
+                        "retry in %(sleep_time)d second(s)") % locals())
+            time.sleep(sleep_time)
 
         return network_model.NetworkInfo.hydrate(nw_info)
 

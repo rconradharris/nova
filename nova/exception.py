@@ -186,8 +186,16 @@ class DecryptionFailure(NovaException):
     message = _("Failed to decrypt text")
 
 
+class VirtualInterfaceCleanupException(NovaException):
+    message = _("Virtual Interface deallocation failed: %(reason)s")
+
+
+class VirtualInterfaceIntegrityException(NovaException):
+    message = _("Virtual Interface has invalid data: %(reason)s")
+
+
 class VirtualInterfaceCreateException(NovaException):
-    message = _("Virtual Interface creation failed")
+    message = _("Virtual Interface creation failed: %(reason)s")
 
 
 class VirtualInterfaceMacAddressException(NovaException):
@@ -533,6 +541,10 @@ class NetworkNotFound(NotFound):
     message = _("Network %(network_id)s could not be found.")
 
 
+class NetworkFoundMultipleTimes(NotFound):
+    message = _("Network %(network_id)s matched multiple networks!")
+
+
 class NetworkNotFoundForBridge(NetworkNotFound):
     message = _("Network could not be found for bridge %(bridge)s")
 
@@ -560,6 +572,10 @@ class NetworkNotFoundForProject(NotFound):
 
 class NetworkHostNotSet(NovaException):
     message = _("Host is not set to the network (%(network_id)s).")
+
+
+class NetworkBusy(NovaException):
+    message = _("Network %(network)s has active ports, cannot delete.")
 
 
 class DatastoreNotFound(NotFound):

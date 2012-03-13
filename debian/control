@@ -98,6 +98,11 @@ Depends: nova-common (= ${binary:Version}), kpartx, curl, parted,
  ebtables, gawk, iptables, dosfstools, ${python:Depends}, ${misc:Depends}
 Description: OpenStack Compute - compute node
 
+Package: nova-cells
+Architecture: all
+Depends: nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: OpenStack Compute - compute cell support
+
 Package: nova-scheduler
 Architecture: all
 Depends: nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}

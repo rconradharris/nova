@@ -16,6 +16,7 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+import functools
 
 from nova.db import base
 from nova import exception
@@ -28,6 +29,29 @@ from nova.rpc import common as rpc_common
 
 FLAGS = flags.FLAGS
 LOG = logging.getLogger(__name__)
+
+
+def refresh_cache(f):
+    """
+    Decorator to update the instance_info_cache
+    """
+    @functools.wraps(f)
+    def wrapper(self, context, *args, **kwargs):
+        res = f(self, context, *args, **kwargs)
+        try:
+            instance = kwargs.get("instance")
+            if not instance and len(args) > 0:
+                instance = args[0]
+            cache = {'network_info': res.as_cache()}
+            self.db.instance_info_cache_update(context, instance['uuid'],
+                                               cache)
+        except Exception:
+            # NOTE(jkoelker) Make sure we return
+            LOG.exception("Failed storing info cache", instance=instance)
+            LOG.debug(_("args: %s") % args)
+            LOG.debug(_("kwargs: %s") % kwargs)
+        return res
+    return wrapper
 
 
 class API(base.Base):
@@ -50,6 +74,13 @@ class API(base.Base):
                         {'method': 'delete_network',
                          'args': {'fixed_range': None,
                                   'uuid': network_uuid}})
+
+    def create(self, context, label, cidr):
+        return rpc.call(context,
+                        FLAGS.network_topic,
+                        {'method': 'create_networks',
+                         'args': {'label': label,
+                                  'cidr': cidr}})
 
     def disassociate(self, context, network_uuid):
         return rpc.call(context,
@@ -153,6 +184,7 @@ class API(base.Base):
                  {'method': 'disassociate_floating_ip',
                   'args': {'address': address}})
 
+    @refresh_cache
     def allocate_for_instance(self, context, instance, **kwargs):
         """Allocates all network structures for an instance.
 
@@ -175,6 +207,7 @@ class API(base.Base):
         """Deallocates all network structures related to instance."""
         args = kwargs
         args['instance_id'] = instance['id']
+        args['instance_uuid'] = instance['uuid']
         args['project_id'] = instance['project_id']
         args['host'] = instance['host']
         rpc.cast(context, FLAGS.network_topic,
@@ -206,6 +239,7 @@ class API(base.Base):
                  {'method': 'add_network_to_project',
                   'args': {'project_id': project_id}})
 
+    @refresh_cache
     def get_instance_nw_info(self, context, instance):
         """Returns all network info related to an instance."""
         args = {'instance_id': instance['id'],

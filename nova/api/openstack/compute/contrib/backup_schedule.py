@@ -23,6 +23,7 @@ from nova import flags
 from nova.api.openstack import extensions
 from nova.api.openstack import wsgi
 from nova.api.openstack import xmlutil
+from nova.openstack.common import cfg
 
 try:
     import tempo.client
@@ -32,28 +33,30 @@ except ImportError:
     LOG.warn(_("Unable to import tempo, backup schedules API extension will"
                " not be available."))
 
-FLAGS = flags.FLAGS
-
 DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY',
         'SATURDAY']
 
 NAMESPACE = "http://docs.openstack.org/ext/backup-schedule/api/v1.1"
 NSMAP = {None: NAMESPACE}
 
+backup_schedule_opts = [
+    cfg.StrOpt('tempo_url',
+               default='http://127.0.0.1:8080',
+               help='URL to pass to connect to Tempo with.'),
+    cfg.IntOpt('weekly_backup_start_hour',
+               default=0,
+               help='Hour that weekly backups should start (0..23)'),
+    cfg.IntOpt('weekly_backup_start_minute',
+               default=0,
+               help='Minutes that weekly backups should start on'
+                    ' (0..59)'),
+    cfg.IntOpt('daily_backup_start_minute',
+               default=0,
+               help='Minutes that daily backups should start on (0..59)')
+]
 
-# NOTE(sirp): prevent DuplicateFlag error when re-imported
-if 'tempo_url' not in FLAGS:
-    flags.DEFINE_string('tempo_url', 'http://127.0.0.1:8080',
-                        'URL to pass to connect to Tempo with.')
-
-    flags.DEFINE_integer('weekly_backup_start_hour', 0,
-                         'Hour that weekly backups should start (0..23)')
-
-    flags.DEFINE_integer('weekly_backup_start_minute', 0,
-                         'Minutes that weekly backups should start on (0..59)')
-
-    flags.DEFINE_integer('daily_backup_start_minute', 0,
-                         'Minutes that daily backups should start on (0..59)')
+FLAGS = flags.FLAGS
+FLAGS.register_opts(backup_schedule_opts)
 
 
 def make_hour_spec(start_hour):

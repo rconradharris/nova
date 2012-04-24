@@ -142,6 +142,9 @@ compute_opts = [
     cfg.BoolOpt('instance_usage_audit',
                default=False,
                help="Generate periodic compute.instance.exists notifications"),
+    cfg.BoolOpt('skip_init_host',
+               default=True,
+               help='Whether or not to skip compute init_host() crap'),
     ]
 
 FLAGS = flags.FLAGS
@@ -299,6 +302,8 @@ class ComputeManager(manager.SchedulerDependentManager):
     def init_host(self):
         """Initialization for a standalone compute service."""
         self.driver.init_host(host=self.host)
+        if FLAGS.skip_init_host:
+            return
         context = nova.context.get_admin_context()
         instances = self.db.instance_get_all_by_host(context, self.host)
 

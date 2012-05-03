@@ -351,12 +351,13 @@ class ComputeAPI(nova.openstack.common.rpc.proxy.RpcProxy):
                 version='1.4')
 
     def rebuild_instance(self, ctxt, instance, new_pass, injected_files,
-            image_ref, orig_image_ref):
+            image_ref, orig_image_ref, orig_sys_metadata):
         instance_p = jsonutils.to_primitive(instance)
         self.cast(ctxt, self.make_msg('rebuild_instance',
                 instance=instance_p, new_pass=new_pass,
                 injected_files=injected_files, image_ref=image_ref,
-                orig_image_ref=orig_image_ref),
+                orig_image_ref=orig_image_ref,
+                orig_sys_metadata=orig_sys_metadata),
                 topic=_compute_topic(self.topic, ctxt, None, instance),
                 version='1.24')
 

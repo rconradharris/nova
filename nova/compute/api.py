@@ -1235,6 +1235,13 @@ class API(base.Base):
             'image_type': image_type,
         }
 
+        # Persist base image pointer as a Glance image property
+        system_meta = self.db.instance_system_metadata_get(
+                context, instance_uuid)
+        base_image_ref = system_meta.get('image_base_image_ref')
+        if base_image_ref:
+            properties['base_image_ref'] = base_image_ref
+
         sent_meta = {'name': name, 'is_public': False}
 
         if image_type == 'backup':
@@ -1333,6 +1340,7 @@ class API(base.Base):
             # layer overhaul.
             sys_metadata = self.db.instance_system_metadata_get(context,
                     instance['uuid'])
+            orig_sys_metadata = dict(sys_metadata)
             # Remove the old keys
             for key in sys_metadata.keys():
                 if key.startswith('image_'):
@@ -1343,6 +1351,7 @@ class API(base.Base):
                 sys_metadata['image_%s' % key] = new_value
             self.db.instance_system_metadata_update(context,
                     instance['uuid'], sys_metadata, True)
+            return orig_sys_metadata
 
         instance = self.update(context, instance,
                                task_state=task_states.REBUILDING,
@@ -1353,11 +1362,12 @@ class API(base.Base):
         # On a rebuild, since we're potentially changing images, we need to
         # wipe out the old image properties that we're storing as instance
         # system metadata... and copy in the properties for the new image.
-        _reset_image_metadata()
+        orig_sys_metadata = _reset_image_metadata()
 
         self.compute_rpcapi.rebuild_instance(context, instance=instance,
                 new_pass=admin_password, injected_files=files_to_inject,
-                image_ref=image_href, orig_image_ref=orig_image_ref)
+                image_ref=image_href, orig_image_ref=orig_image_ref,
+                orig_sys_metadata=orig_sys_metadata)
 
     @wrap_check_policy
     @check_instance_lock

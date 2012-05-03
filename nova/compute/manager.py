@@ -1007,7 +1007,8 @@ class ComputeManager(manager.SchedulerDependentManager):
     @checks_instance_lock
     @wrap_instance_fault
     def rebuild_instance(self, context, orig_image_ref,
-            image_ref, instance=None, instance_uuid=None, **kwargs):
+            image_ref, instance=None, instance_uuid=None,
+            orig_sys_metadata=None, **kwargs):
         """Destroy and re-make this instance.
 
         A 'rebuild' effectively purges all existing data from the system and
@@ -1038,7 +1039,8 @@ class ComputeManager(manager.SchedulerDependentManager):
             orig_image_ref_url = utils.generate_image_url(orig_image_ref)
             extra_usage_info = {'image_ref_url': orig_image_ref_url}
             compute_utils.notify_usage_exists(context, instance,
-                    current_period=True, extra_usage_info=extra_usage_info)
+                    current_period=True, system_metadata=orig_sys_metadata,
+                    extra_usage_info=extra_usage_info)
 
             # This message should contain the new image_ref
             extra_usage_info = {'image_name': image_meta['name']}

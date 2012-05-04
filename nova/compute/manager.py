@@ -1041,6 +1041,13 @@ class ComputeManager(manager.SchedulerDependentManager):
         :param orig_sys_metadata: instance system metadata from pre-rebuild
         """
         context = context.elevated()
+
+        # This is a grievous hack to make usage happy for the moment
+        # We will remove this when their system is fixed. (mdragon)
+        instance = self._instance_update(context,
+                instance['uuid'], launched_at=timeutils.utcnow())
+        # Endhack.
+
         with self._error_out_instance_on_exception(context, instance['uuid']):
             LOG.audit(_("Rebuilding instance"), context=context,
                       instance=instance)
@@ -1469,9 +1476,12 @@ class ComputeManager(manager.SchedulerDependentManager):
         """
         context = context.elevated()
         migration_ref = self.db.migration_get(context, migration_id)
-        if not instance:
-            instance = self.db.instance_get_by_uuid(context,
-                    migration_ref.instance_uuid)
+        # This is a grievous hack to make usage happy for the moment
+        # We will remove this when their system is fixed. (mdragon)
+        instance = self._instance_update(context,
+                migration_ref.instance_uuid,
+                launched_at=timeutils.utcnow())
+        # Endhack.
 
         # NOTE(comstud): A revert_resize is essentially a resize back to
         # the old size, so we need to send a usage event here.
@@ -1565,6 +1575,13 @@ class ComputeManager(manager.SchedulerDependentManager):
 
         """
         context = context.elevated()
+
+        # This is a grievous hack to make usage happy for the moment
+        # We will remove this when their system is fixed. (mdragon)
+        instance = self._instance_update(context,
+                instance['uuid'], launched_at=timeutils.utcnow())
+        # Endhack.
+
         with self._error_out_instance_on_exception(context, instance['uuid'],
                                                    reservations):
             compute_utils.notify_usage_exists(

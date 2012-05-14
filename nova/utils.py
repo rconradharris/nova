@@ -42,6 +42,7 @@ import uuid
 import weakref
 from xml.sax import saxutils
 
+from Crypto.PublicKey import RSA
 from eventlet import corolocal
 from eventlet import event
 from eventlet.green import subprocess
@@ -1292,3 +1293,8 @@ def create_instance_fault_from_exc(context, instance_uuid, fault,
     }
 
     return values
+
+
+def encrypt_rsa(public_key, plain_text):
+    # NOTE(sirp): K-param is not used by RSA
+    return RSA.importKey(public_key).encrypt(plain_text, None)[0]

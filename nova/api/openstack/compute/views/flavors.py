@@ -34,7 +34,7 @@ class ViewBuilder(common.ViewBuilder):
         }
 
     def show(self, request, flavor):
-        return {
+        flavor_dict = {
             "flavor": {
                 "id": flavor["flavorid"],
                 "name": flavor["name"],
@@ -48,6 +48,15 @@ class ViewBuilder(common.ViewBuilder):
                                          self._collection_name),
             },
         }
+
+        # NOTE(sirp): since only admins see disabled flavors at all, only they
+        # need to be able to see the disabled attribute
+        context = request.environ['nova.context']
+        if context.is_admin:
+            flavor_dict["flavor"]["OS-FLV-DISABLED:disabled"] =\
+                    flavor.get("disabled", "")
+
+        return flavor_dict
 
     def index(self, request, flavors):
         """Return the 'index' view of flavors."""

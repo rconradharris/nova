@@ -2149,8 +2149,8 @@ class CloudTestCase(test.TestCase):
             self.assertEqual(vol['id'], vol1['id'])
             self._assert_volume_attached(vol, instance_uuid, '/dev/sdb')
 
-        vol = db.volume_get(self.context, vol2['id'])
-        self._assert_volume_detached(vol)
+        db_vol2 = db.volume_get(self.context, vol2['id'])
+        self._assert_volume_detached(db_vol2)
 
         instance = db.instance_get(self.context, instance_id)
         self.cloud.compute_api.attach_volume(self.context,
@@ -2160,10 +2160,10 @@ class CloudTestCase(test.TestCase):
         vol = db.volume_get(self.context, vol2['id'])
         self._assert_volume_attached(vol, instance_uuid, '/dev/sdc')
 
-        self.cloud.compute_api.detach_volume(self.context,
-                                             volume_id=vol1['id'])
-        vol = db.volume_get(self.context, vol1['id'])
-        self._assert_volume_detached(vol)
+        db_vol1 = db.volume_get(self.context, vol1['id'])
+        self.cloud.compute_api.detach_volume(self.context, instance, db_vol1)
+        db_vol1 = db.volume_get(self.context, vol1['id'])
+        self._assert_volume_detached(db_vol1)
 
         result = self.cloud.stop_instances(self.context, [ec2_instance_id])
         self.assertTrue(result)
@@ -2178,8 +2178,8 @@ class CloudTestCase(test.TestCase):
             self.assertEqual(vol['id'], vol2['id'])
             self._assert_volume_attached(vol, instance_uuid, '/dev/sdc')
 
-        vol = db.volume_get(self.context, vol1['id'])
-        self._assert_volume_detached(vol)
+        db_vol1 = db.volume_get(self.context, vol1['id'])
+        self._assert_volume_detached(db_vol1)
 
         self.cloud.terminate_instances(self.context, [ec2_instance_id])
 

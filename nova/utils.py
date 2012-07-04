@@ -37,6 +37,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 import uuid
 import weakref
 from xml.sax import saxutils
@@ -1268,3 +1269,26 @@ class UndoManager(object):
                 LOG.exception(msg, **kwargs)
 
             self._rollback()
+
+
+def create_instance_fault_from_exc(context, instance_uuid, fault,
+        exc_info=None):
+    """Adds the specified fault to the database."""
+
+    code = 500
+    if hasattr(fault, "kwargs"):
+        code = fault.kwargs.get('code', 500)
+
+    details = unicode(fault)
+    if exc_info and code == 500:
+        tb = exc_info[2]
+        details += '\n' + ''.join(traceback.format_tb(tb))
+
+    values = {
+        'instance_uuid': instance_uuid,
+        'code': code,
+        'message': fault.__class__.__name__,
+        'details': unicode(details),
+    }
+
+    return values

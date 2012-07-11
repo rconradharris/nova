@@ -1409,6 +1409,15 @@ class ComputeManager(manager.SchedulerDependentManager):
         """
         context = context.elevated()
         migration_ref = self.db.migration_get(context, migration_id)
+        if not instance:
+            instance = self.db.instance_get_by_uuid(context,
+                    migration_ref.instance_uuid)
+
+        # NOTE(comstud): A revert_resize is essentially a resize back to
+        # the old size, so we need to send a usage event here.
+        compute_utils.notify_usage_exists(
+                context, instance, current_period=True)
+
         with self._error_out_instance_on_exception(context, instance['uuid'],
                                                    reservations):
             # NOTE(tr3buchet): tear down networks on destination host

@@ -102,7 +102,7 @@ class WeightedCell(object):
 
 
 def get_weighted_cells(weighter_classes, cells, weighing_properties):
-    """Return a sorted (lowest score first) list of WeightedCells."""
+    """Return a sorted (highest score first) list of WeightedCells."""
 
     weighters = []
 
@@ -117,4 +117,4 @@ def get_weighted_cells(weighter_classes, cells, weighing_properties):
             weight += (weighter.fn_weight() *
                     weighter.cell_weight(cell, weighing_properties))
         weighted_cells.append(WeightedCell(cell, weight))
-    return sorted(weighted_cells, key=lambda x: x.weight)
+    return sorted(weighted_cells, key=lambda x: x.weight, reverse=True)

@@ -38,14 +38,17 @@ class CellSpreadByRamWeighter(weights.BaseCellWeighter):
         return FLAGS.cells_spread_by_ram_weighter_multiplier
 
     def cell_weight(self, cell, weight_properties):
-        """Override in a subclass to weigh a cell."""
+        """
+        Use the 'ram_free' for a particular instance_type advertised from a
+        child cell's capacity to compute a weight.  We want to direct the
+        build to a cell with a higher capacity.  Since higher weights win,
+        we just return the number of units available for the instance_type.
+        """
         request_spec = weight_properties['request_spec']
         instance_type = request_spec['instance_type']
-        memory_mb = instance_type['memory_mb']
+        memory_needed = instance_type['memory_mb']
 
         ram_free = cell.capacities.get('ram_free', {})
         units_by_mb = ram_free.get('units_by_mb', {})
 
-        # Lower weights win, so we need to invert the values in
-        # order to spread.
-        return 1000 - units_by_mb.get(str(memory_mb), 0)
+        return units_by_mb.get(str(memory_needed), 0)

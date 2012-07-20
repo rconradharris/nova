@@ -23,6 +23,7 @@ from nova.api.openstack import xmlutil
 from nova.cells import api as cells_api
 from nova import context
 from nova import db
+from nova import exception
 from nova import flags
 from nova.openstack.common import timeutils
 from nova import test
@@ -46,7 +47,10 @@ FAKE_CAPABILITIES = [
 
 
 def fake_db_cell_get(context, cell_id):
-    return FAKE_CELLS[cell_id - 1]
+    try:
+        return FAKE_CELLS[cell_id - 1]
+    except IndexError:
+        raise exception.CellNotFound
 
 
 def fake_db_cell_create(context, values):
@@ -110,6 +114,14 @@ class CellsTest(test.TestCase):
             self.assertEqual(cell['capabilities'], FAKE_CAPABILITIES[i])
             self.assertNotIn('password', cell)
 
+    def test_show_nan_raises(self):
+        req = self._get_request("cells/1")
+        self.assertRaises(exc.HTTPBadRequest, self.controller.show, req, 'aoe')
+
+    def test_show_no_cell_raises(self):
+        req = self._get_request("cells/1")
+        self.assertRaises(exc.HTTPNotFound, self.controller.show, req, '999')
+
     def test_get_cell_by_id(self):
         req = self._get_request("cells/1")
         res_dict = self.controller.show(req, 1)
@@ -131,6 +143,16 @@ class CellsTest(test.TestCase):
         req = self._get_request("cells/999")
         self.controller.delete(req, 999)
         self.assertEqual(call_info['delete_called'], 1)
+
+    def test_delete_nan_raises(self):
+        req = self._get_request("cells/1")
+        self.assertRaises(exc.HTTPBadRequest, self.controller.delete,
+                req, 'aoe')
+
+    def test_delete_nan_raises(self):
+        req = self._get_request("cells/1")
+        req.environ['nova.context'] = self.context
+        self.assertRaises(exc.HTTPNotFound, self.controller.delete, req, '999')
 
     def test_cell_create_parent(self):
         body = {'cell': {'name': 'meow',

@@ -14,6 +14,17 @@
 #    under the License.
 """
 Fakes For Cells tests.
+
+We make up this list of fake cells, hosts and managers:
+
+supposing the test set flags.cell_name to 'cell0':
+
+cell0
+    cell4
+    cell5
+    cell2
+        grandchild
+
 """
 
 from nova.cells import manager
@@ -24,6 +35,19 @@ from nova import flags
 FLAGS = flags.FLAGS
 
 MY_CELL_NAME = FLAGS.cell_name
+"""FAKE_CELLS is basically the database content for all cell info.
+
+In real life, each cell has its own database of just the adjacent cells.
+If a cell has is_parent=1 it means that's a parent cell, otherwise a
+child cell.
+
+each entry in FAKE_CELLS points to a fake DB entry for one of the cells; look
+at
+
+    def _cell_get_all(self, context):
+
+below and in nova.cells.manager to see how it's used in the tests.
+"""
 FAKE_CELLS = {}
 
 FAKE_CELLS_REFRESH = [dict(id=5, name='cell1', is_parent=False),
@@ -84,6 +108,8 @@ class FakeCellsManager(manager.CellsManager):
         _my_host = kwargs.pop('_my_host', FLAGS.host)
         self._test_call_info = {'test_method': 0, 'send_message': 0,
                 'send_message_fanout': 0}
+        # Pretend to have a capacity
+        self.capacities = kwargs.pop('capacities', {})
         super(FakeCellsManager, self).__init__(**kwargs)
         # Now fudge some things for testing
         self.my_cell_info.name = _my_name
@@ -104,11 +130,8 @@ class FakeCellsManager(manager.CellsManager):
     def _ask_children_for_capabilities(self, context):
         pass
 
-    def _ask_children_for_capacities(self, context):
-        pass
-
     def _update_our_capacity(self, context):
-        self.my_cell_info.update_capacities({})
+        self.my_cell_info.update_capacities(self.capacities)
 
     def _cell_get_all(self, context):
         return FAKE_CELLS.get(self.my_cell_info.name, [])

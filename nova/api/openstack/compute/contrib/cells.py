@@ -194,7 +194,9 @@ class Controller(object):
         except ValueError:
             expl = _('Cell ID should be an integer')
             raise exc.HTTPBadRequest(explanation=expl)
-        db.cell_delete(context, cell_id)
+        num_deleted = db.cell_delete(context, cell_id)
+        if num_deleted == 0:
+            raise exc.HTTPNotFound()
         return {}
 
     def _validate_cell_name(self, cell_name):

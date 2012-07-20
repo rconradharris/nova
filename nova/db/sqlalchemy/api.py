@@ -4004,7 +4004,7 @@ def cell_update(context, cell_id, values):
 def cell_delete(context, cell_id):
     session = get_session()
     with session.begin():
-        _cell_get_by_id_query(context, cell_id, session=session).\
+        return _cell_get_by_id_query(context, cell_id, session=session).\
                 delete()
 
 

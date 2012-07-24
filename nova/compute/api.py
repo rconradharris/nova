@@ -854,6 +854,7 @@ class API(base.Base):
                 pass
 
     def _delete(self, context, instance):
+        original_task_state = instance['task_state']
         host = instance['host']
         reservations = QUOTAS.reserve(context,
                                       instances=-1,
@@ -883,6 +884,24 @@ class API(base.Base):
                 # ensure the original instance is cleaned up too
                 migration_ref = self.db.migration_get_by_instance_and_status(
                         context, instance['uuid'], 'finished')
+                if migration_ref:
+                    src_host = migration_ref['source_compute']
+                    # Call since this can race with the terminate_instance
+                    self.compute_rpcapi.confirm_resize(context,
+                            instance, migration_ref['id'],
+                            host=src_host, cast=False)
+
+            MIGRATING_TASK_STATES = [
+                task_states.RESIZE_PREP, task_states.RESIZE_MIGRATING,
+                task_states.RESIZE_MIGRATED, task_states.RESIZE_FINISH,
+                task_states.RESIZE_REVERTING, task_states.RESIZE_CONFIRMING]
+
+            if original_task_state in MIGRATING_TASK_STATES:
+                # If our last migration failed, confirm it so as to destroy the
+                # data on the source machine.
+                migration_ref = self.db.migration_get_by_instance_and_status(
+                        context, instance['uuid'], 'error')
+
                 if migration_ref:
                     src_host = migration_ref['source_compute']
                     # Call since this can race with the terminate_instance

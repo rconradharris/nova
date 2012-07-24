@@ -1499,17 +1499,21 @@ class ComputeManager(manager.SchedulerDependentManager):
                 LOG.error(_('%s. Setting instance vm_state to ERROR') % error,
                           instance=instance_ref)
                 self._set_instance_error_state(context, instance_uuid)
+                self.db.migration_update(context,
+                                         migration_id,
+                                         {'status': 'error'})
+        else:
+            self.db.migration_update(context,
+                                     migration_id,
+                                     {'status': 'post-migrating'})
 
-        self.db.migration_update(context,
-                                 migration_id,
-                                 {'status': 'post-migrating'})
+            self._instance_update(context, instance_uuid,
+                                  task_state=task_states.RESIZE_MIGRATED)
 
-        self._instance_update(context, instance_uuid,
-                              task_state=task_states.RESIZE_MIGRATED)
+            self.compute_rpcapi.finish_resize(context, instance_ref, migration_id,
+                    image, disk_info, migration_ref['dest_compute'])
 
-        self.compute_rpcapi.finish_resize(context, instance_ref, migration_id,
-                image, disk_info, migration_ref['dest_compute'])
-
+        # Send notification that task terminated regardless of success
         self._notify_about_instance_usage(context, instance_ref, "resize.end",
                                           network_info=network_info)
 

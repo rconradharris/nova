@@ -2439,6 +2439,7 @@ class XenAPIInjectMetadataTestCase(stubs.XenAPITestBase):
                 'ephem': {},
                 })
 
+    @test.skip_test('comstud: this feature is disabled for now')
     def test_change_instance_metadata_add(self):
         # Test XenStore key sanitizing here, too.
         diff = {'test.key': ['+', 4]}
@@ -2472,6 +2473,7 @@ class XenAPIInjectMetadataTestCase(stubs.XenAPITestBase):
                     },
                 })
 
+    @test.skip_test('comstud: this feature is disabled for now')
     def test_change_instance_metadata_update(self):
         diff = dict(b=['+', 4])
         self.xenstore = {
@@ -2502,6 +2504,7 @@ class XenAPIInjectMetadataTestCase(stubs.XenAPITestBase):
                     },
                 })
 
+    @test.skip_test('comstud: this feature is disabled for now')
     def test_change_instance_metadata_delete(self):
         diff = dict(b=['-'])
         self.xenstore = {

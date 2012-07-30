@@ -1098,6 +1098,14 @@ class ComputeManager(manager.SchedulerDependentManager):
 
             # This message should contain the new image_ref
             extra_usage_info = {'image_name': image_meta['name']}
+
+            admin_pass = kwargs.get('new_pass',
+                    utils.generate_password(FLAGS.password_length))
+
+            # Get encrypted password for notifications
+            password_info = self._get_password_info(context, admin_pass)
+            extra_usage_info['password_info'] = password_info
+
             self._notify_about_instance_usage(context, instance,
                     "rebuild.start", extra_usage_info=extra_usage_info)
 
@@ -1124,13 +1132,12 @@ class ComputeManager(manager.SchedulerDependentManager):
                                              instance['uuid'],
                                              task_state=task_states.\
                                              REBUILD_SPAWNING)
-            # pull in new password here since the original password isn't in
-            # the db
-            admin_password = kwargs.get('new_pass',
-                    utils.generate_password(FLAGS.password_length))
+
+            # Set the new password
+            instance['admin_pass'] = admin_pass
 
             self.driver.spawn(context, instance, image_meta,
-                              [], admin_password,
+                              [], admin_pass,
                               self._legacy_nw_info(network_info),
                               device_info)
 

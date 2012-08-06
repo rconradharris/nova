@@ -48,6 +48,12 @@ def cell_broadcast(context, direction, method, **kwargs):
     rpc.cast(context, FLAGS.cells_topic, bcast_message)
 
 
+def cell_broadcast_call(context, direction, method, **kwargs):
+    bcast_message = cells_utils.form_broadcast_call_message(direction, method,
+            kwargs)
+    return rpc.call(context, FLAGS.cells_topic, bcast_message)
+
+
 def broadcast_service_api_method(context, service_name, method, *args,
         **kwargs):
     """Encapsulate a call to a service API within a broadcast message"""

@@ -598,6 +598,51 @@ class CellsManager(manager.Manager):
             return result
 
     @cells_utils.update_routing_path
+    def broadcast_call(self, context, routing_path, direction, message,
+                       response_uuid=None, **kwargs):
+        """Route messages to the destination cells."""
+        if not response_uuid:
+            response_uuid = str(utils.gen_uuid())
+
+        self.response_queues[response_uuid] = queue.Queue()
+        response_queue = self.response_queues[response_uuid]
+        response_direction = 'down' if direction == 'up' else 'up'
+
+        if direction == 'down':
+            dest_cells = self.get_child_cells()
+        else:
+            dest_cells = self.get_parent_cells()
+
+        if dest_cells:
+            broadcast_msg = cells_utils.form_broadcast_call_message(direction,
+                    message['method'], message['args'], response_uuid,
+                    routing_path)
+            self.send_raw_message_to_cells(context, dest_cells, broadcast_msg)
+
+        our_response = self._process_message_for_me(context, message,
+                routing_path=routing_path, **kwargs)
+
+        our_cell_name = self.my_cell_info.name
+        responses = [(our_response, our_cell_name)]
+        wait_time = FLAGS.cell_call_timeout
+
+        for cell in dest_cells:
+            try:
+                responses.extend(response_queue.get(timeout=wait_time))
+            except queue.Empty:
+                del self.response_queues[response_uuid]
+                raise exception.CellTimeout()
+
+        del self.response_queues[response_uuid]
+
+        if not self._path_is_us(routing_path):
+            self._route_response(context, response_uuid, routing_path,
+                    response_direction, responses, failure=False)
+
+        return responses
+
+
+    @cells_utils.update_routing_path
     def broadcast_message(self, context, direction, message, hopcount,
             fanout, routing_path, **kwargs):
         """Broadcast a message to all parent or child cells and also
@@ -873,3 +918,13 @@ class CellsManager(manager.Manager):
         msg = {"method": "create_volume",
                "args": kwargs}
         rpc.cast(context, topic, msg)
+
+    def get_service(self, context, routing_path, **kwargs):
+        service_id = kwargs.get("service_id")
+        try:
+            return db.service_get(context, service_id)
+        except exception.ServiceNotFound:
+            return None
+
+    def list_services(self, context, routing_path):
+        return db.service_get_all(context)

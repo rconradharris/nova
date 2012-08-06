@@ -44,6 +44,17 @@ def form_routing_message(dest_cell_name, direction, method,
     return {'method': 'route_message', 'args': args}
 
 
+def form_broadcast_call_message(direction, method,
+        method_kwargs, response_uuid=None, routing_path=None):
+    """Create a broadcast message which requires a response."""
+    args = {'routing_path': routing_path,
+            'direction': direction,
+            'message': {'method': method, 'args': method_kwargs}}
+    if response_uuid:
+        args['response_uuid'] = response_uuid
+    return {'method': 'broadcast_call', 'args': args}
+
+
 def form_broadcast_message(direction, method, method_kwargs,
         routing_path=None, hopcount=0, fanout=False):
     """Create a broadcast message."""

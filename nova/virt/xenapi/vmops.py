@@ -819,6 +819,19 @@ class VMOps(object):
                                        step=0,
                                        total_steps=RESIZE_TOTAL_STEPS)
 
+        # Don't allow resize if the VDI is larger than the new size:
+        vdi_ref, vm_vdi_rec = vm_utils.get_vdi_for_vm_safely(self._session,
+                vm_ref)
+        vdi_sz_bytes = vm_utils._get_vdi_chain_size(self._session,
+                vm_vdi_rec['uuid'])
+        new_sz_bytes = instance_type['root_gb'] * 1024 * 1024 * 1024
+
+        if vdi_sz_bytes > new_sz_bytes:
+            msg = _("Can't resize disk down.  VDI sz %(vdi_sz_bytes)d > "
+                    "targeted size %(new_sz_bytes)d") % locals()
+            raise exception.InstanceTypeDiskTooSmall(msg,
+                    instance_uuid=instance['uuid'])
+
         if resize_down:
             self._migrate_disk_resizing_down(
                     context, instance, dest, instance_type, vm_ref, sr_path)

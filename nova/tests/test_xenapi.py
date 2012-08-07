@@ -1060,6 +1060,28 @@ class XenAPIMigrateInstance(stubs.XenAPITestBase):
                           self.context, instance,
                           '127.0.0.1', instance_type, None)
 
+    def test_migrate_disk_and_power_off_vdi_too_large(self):
+        """Resizing disk down should fail if the source VDI larger than
+        the new size.
+        """
+        def fake_size(session, vdi_ref_uuid):
+            """Just return an amount > than the instance type's root_gb"""
+            return 5 * 1024 * 1024 * 1024
+        self.stubs.Set(vm_utils, "_get_vdi_chain_size", fake_size)
+        instance = db.instance_create(self.context, self.instance_values)
+        instance_type = db.instance_type_get_by_name(self.context, 'm1.tiny')
+        instance_type['root_gb'] = 1  # 1 GB
+
+        conn = xenapi_conn.XenAPIDriver(False)
+
+        def fake_get_vm_ref(instance):
+            return "12345"
+        self.stubs.Set(conn._vmops, '_get_vm_opaque_ref', fake_get_vm_ref)
+
+        self.assertRaises(exception.InstanceTypeDiskTooSmall,
+                conn.migrate_disk_and_power_off, self.context, instance,
+                '127.0.0.1', instance_type, None)
+
     def test_revert_migrate(self):
         instance = db.instance_create(self.context, self.instance_values)
         self.called = False

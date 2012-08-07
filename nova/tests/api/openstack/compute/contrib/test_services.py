@@ -1,11 +1,11 @@
 import mock
-import unittest
 
+from nova import test
 from nova.tests.api.openstack import fakes
 from nova.api.openstack.compute.contrib import services
 
 
-class TestCellsServicesController(unittest.TestCase):
+class TestCellsServicesController(test.TestCase):
 
     non_compute_service = {
         'disabled': False,
@@ -38,6 +38,7 @@ class TestCellsServicesController(unittest.TestCase):
         """
         Run before each test.
         """
+        super(TestCellsServicesController, self).setUp()
         # Fake/Mock Nova Context
         self.fake_context = mock.Mock()
         self.fake_context.read_deleted = "no"
@@ -51,15 +52,23 @@ class TestCellsServicesController(unittest.TestCase):
         # Mock/Patch the cell_broadcast_call method
         bc_patch = mock.patch("nova.cells.api.cell_broadcast_call")
         self.bc_mock = bc_patch.start()
-        self.addCleanup(bc_patch.stop)
 
         # Mock/Patch db.instance_get_all_by_host
         db_get_all_patch = mock.patch('nova.db.instance_get_all_by_host')
         self.db_get_all_mock = db_get_all_patch.start()
-        self.addCleanup(db_get_all_patch.stop)
+
+        def _cleanup_func():
+            bc_patch.stop()
+            db_get_all_patch.stop()
+
+        self._stop_func = _cleanup_func
 
         # Create controller to be used in each test
         self.controller = services.CellsServicesController()
+
+    def tearDown(self):
+        self._stop_func()
+        super(TestCellsServicesController, self).tearDown()
 
     def test_empty_index(self):
         """

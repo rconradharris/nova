@@ -641,7 +641,6 @@ class CellsManager(manager.Manager):
 
         return responses
 
-
     @cells_utils.update_routing_path
     def broadcast_message(self, context, direction, message, hopcount,
             fanout, routing_path, **kwargs):

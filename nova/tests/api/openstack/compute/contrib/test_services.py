@@ -1,8 +1,8 @@
 import mock
 
+from nova.api.openstack.compute.contrib import services
 from nova import test
 from nova.tests.api.openstack import fakes
-from nova.api.openstack.compute.contrib import services
 
 
 class TestCellsServicesController(test.TestCase):
@@ -46,7 +46,7 @@ class TestCellsServicesController(test.TestCase):
 
         # Fake/Mock WSGI Request
         self.fake_req = mock.MagicMock()
-        self.fake_req.environ = {"nova.context":self.fake_context}
+        self.fake_req.environ = {"nova.context": self.fake_context}
         self.fake_req.application_url = "http://test/v1"
 
         # Mock/Patch the cell_broadcast_call method
@@ -74,39 +74,39 @@ class TestCellsServicesController(test.TestCase):
         """
         Test showing empty index of services.
         """
-        self.bc_mock.return_value = [([],"c0001")]
+        self.bc_mock.return_value = [([], "c0001")]
         response = self.controller.index(self.fake_req)
-        self.assertEqual({"services":[]}, response)
+        self.assertEqual({"services": []}, response)
 
     def test_index(self):
         """
         Test showing index of services.
         """
-        self.bc_mock.return_value = [([self.non_compute_service],"c0001")]
+        self.bc_mock.return_value = [([self.non_compute_service], "c0001")]
         response = self.controller.index(self.fake_req)
-        self.assertEqual({"services":[self.non_compute_service]}, response)
+        self.assertEqual({"services": [self.non_compute_service]}, response)
 
     def test_show(self):
         """
         Test showing a single service.
         """
-        self.bc_mock.return_value = [(self.non_compute_service,"c0001")]
+        self.bc_mock.return_value = [(self.non_compute_service, "c0001")]
         response = self.controller.show(self.fake_req, "c0001-1")
-        self.assertEqual({"service":self.non_compute_service}, response)
+        self.assertEqual({"service": self.non_compute_service}, response)
 
     def test_details_non_compute(self):
         """
         Test retrieving details on a non compute-type service.
         """
-        self.bc_mock.return_value = [(self.non_compute_service,"c0001")]
+        self.bc_mock.return_value = [(self.non_compute_service, "c0001")]
         response = self.controller.details(self.fake_req, "c0001-1")
-        self.assertEqual({"details":{}}, response)
+        self.assertEqual({"details": {}}, response)
 
     def test_details_compute(self):
         """
         Test retrieving details on a compute-type service.
         """
-        self.bc_mock.return_value = [(self.compute_service,"c0001")]
+        self.bc_mock.return_value = [(self.compute_service, "c0001")]
         response = self.controller.details(self.fake_req, "c0001-1")
 
         expected = {
@@ -130,15 +130,15 @@ class TestCellsServicesController(test.TestCase):
         """
         Test retrieving an empty list of servers on a compute node.
         """
-        self.bc_mock.return_value = [(self.compute_service,"c0001")]
+        self.bc_mock.return_value = [(self.compute_service, "c0001")]
         response = self.controller.servers(self.fake_req, "c0001-1")
-        self.assertEqual({"servers":[]}, response)
+        self.assertEqual({"servers": []}, response)
 
     def test_servers_for_service(self):
         """
         Test retrieving a list of servers on a compute node.
         """
-        self.bc_mock.return_value = [(self.compute_service,"c0001")]
+        self.bc_mock.return_value = [(self.compute_service, "c0001")]
         self.db_get_all_mock.return_value = [
             fakes.fake_instance_get()(self.fake_context, "fake_uuid1"),
             fakes.fake_instance_get()(self.fake_context, "fake_uuid2"),

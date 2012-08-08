@@ -97,8 +97,10 @@ def schedule_run_instance(context, **kwargs):
     rpc.cast(context, FLAGS.cells_topic, message)
 
 
-def call_dbapi_method(context, method, args, kwargs, sub_topic=None):
+def call_dbapi_method(context, method, args, kwargs=None, sub_topic=None):
     """Broadcast message up, saying to call a DB API method."""
+    if kwargs is None:
+        kwargs = {}
     db_method_info = {'method': method,
                       'method_args': args,
                       'method_kwargs': kwargs}
@@ -194,14 +196,15 @@ def bw_usage_update(context, *args, **kwargs):
     if not FLAGS.enable_cells:
         return
     call_dbapi_method(context, 'bw_usage_update',
-            args, kwargs, sub_topic='bw_updates')
+            args, kwargs=kwargs, sub_topic='bw_updates')
 
 
 def instance_metadata_update(context, *args, **kwargs):
     """Broadcast upwards that bw_usage was updated."""
     if not FLAGS.enable_cells:
         return
-    call_dbapi_method(context, 'instance_metadata_update', args, kwargs)
+    call_dbapi_method(context, 'instance_metadata_update', args,
+            kwargs=kwargs)
 
 
 def get_all_cell_info(context):

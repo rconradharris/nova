@@ -118,6 +118,26 @@ class CellInfo(object):
         return cell_info
 
 
+class CellsBWUpdateManager(manager.Manager):
+    """Cells RPC consumer manager for BW updates."""
+    def __init__(self, cells_manager):
+        self.cells_manager = cells_manager
+
+    def __getattr__(self, key):
+        """Makes all scheduler_ methods pass through to scheduler"""
+        return getattr(self.cells_manager, key)
+
+
+class CellsReplyManager(manager.Manager):
+    """Cells RPC consumer manager for replies."""
+    def __init__(self, cells_manager):
+        self.cells_manager = cells_manager
+
+    def __getattr__(self, key):
+        """Makes all scheduler_ methods pass through to scheduler"""
+        return getattr(self.cells_manager, key)
+
+
 class CellsManager(manager.Manager):
     """Handles cell communication."""
 
@@ -134,11 +154,14 @@ class CellsManager(manager.Manager):
                     FLAGS.cells_scheduler)
         if not cell_info_cls:
             cell_info_cls = CellInfo
+        self.bw_updates_topic = FLAGS.cells_topic + '.bw_updates'
+        self.replies_topic = FLAGS.cells_topic + '.replies'
         self.driver = cells_driver_cls(self)
         self.scheduler = cells_scheduler_cls(self)
         self.cell_info_cls = cell_info_cls
         self.my_cell_info = cell_info_cls(FLAGS.cell_name, is_me=True)
         my_cell_capabs = {}
+        self.rpc_connections = []
         for cap in FLAGS.cell_capabilities:
             name, value = cap.split('=', 1)
             if ';' in value:
@@ -178,6 +201,22 @@ class CellsManager(manager.Manager):
                 self._tell_parents_our_capacities(ctxt)
 
         greenthread.spawn_n(_cells_manager_startup)
+        self._start_separate_consumer(CellsBWUpdateManager,
+                self.bw_updates_topic)
+        self._start_separate_consumer(CellsReplyManager,
+                self.replies_topic, host_too=True)
+
+    def _start_separate_consumer(self, manager_cls, topic, fanout=False,
+            host_too=False):
+        manager = manager_cls(self)
+        rpc_dispatcher = manager.create_rpc_dispatcher()
+        conn = rpc.create_connection(new=True)
+        conn.create_consumer(topic, rpc_dispatcher, fanout=fanout)
+        if host_too:
+            topic += '.' + FLAGS.host
+            conn.create_consumer(topic, rpc_dispatcher, fanout=fanout)
+        self.rpc_connections.append(conn)
+        conn.consume_in_thread()
 
     def __getattr__(self, key):
         """Makes all scheduler_ methods pass through to scheduler"""
@@ -419,10 +458,10 @@ class CellsManager(manager.Manager):
         return fn(context, routing_path=routing_path, **args)
 
     def send_raw_message_to_cell(self, context, cell, message,
-            dest_host=None, fanout=False):
+            dest_host=None, fanout=False, topic=None):
         """Send a raw message to a cell."""
         self.driver.send_message_to_cell(context, cell, dest_host, message,
-                fanout=fanout)
+                fanout=fanout, topic=topic)
 
     def send_routing_message(self, context, dest_cell_name, message):
         """Send a routing message to a cell by name."""
@@ -434,12 +473,12 @@ class CellsManager(manager.Manager):
         self.driver.send_message_to_cell(context, next_hop, None, message)
 
     def send_raw_message_to_cells(self, context, cells, msg, dest_host=None,
-            fanout=False, ignore_exceptions=True):
+            fanout=False, ignore_exceptions=True, topic=None):
         """Send a broadcast message to multiple cells."""
         for cell in cells:
             try:
                 self.send_raw_message_to_cell(context, cell, msg,
-                        dest_host=dest_host, fanout=fanout)
+                        dest_host=dest_host, fanout=fanout, topic=topic)
             except Exception, e:
                 if not ignore_exceptions:
                     raise
@@ -490,7 +529,7 @@ class CellsManager(manager.Manager):
                 direction, 'send_response', kwargs,
                 routing_path=resp_routing_path)
         self.send_raw_message_to_cell(context, next_hop, routing_message,
-                dest_host=hop_host)
+                dest_host=hop_host, topic=self.replies_topic)
 
     def send_response(self, context, response_uuid, result_info, **kwargs):
         """This method is called when a another cell has responded to a
@@ -537,8 +576,13 @@ class CellsManager(manager.Manager):
                     dest_cell_name, direction, message['method'],
                     message['args'], response_uuid=resp_uuid,
                     routing_path=routing_path)
+            if resp_uuid:
+                topic = self.replies_topic
+            else:
+                topic = None
             self.send_raw_message_to_cell(context, next_hop,
-                    routing_message, dest_host=hop_host)
+                    routing_message, dest_host=hop_host,
+                    topic=topic)
 
     @cells_utils.update_routing_path
     def route_message(self, context, dest_cell_name, routing_path,
@@ -659,12 +703,18 @@ class CellsManager(manager.Manager):
         bcast_msg = cells_utils.form_broadcast_message(direction,
                 message['method'], message['args'],
                 routing_path=routing_path, hopcount=hopcount, fanout=fanout)
+        topic = None
+        if message['method'] == 'call_dbapi_method':
+            db_method_info = message.get('args', {}).get('db_method_info', {})
+            if 'bw_usage' in db_method_info.get('method', ''):
+                topic = self.bw_updates_topic
         # Forward request on to other cells
         if direction == 'up':
             cells = self.get_parent_cells()
         else:
             cells = self.get_child_cells()
-        self.send_raw_message_to_cells(context, cells, bcast_msg)
+        self.send_raw_message_to_cells(context, cells, bcast_msg,
+                topic=topic)
         # Now let's process it.
         self._process_message_for_me(context, message,
                 routing_path=routing_path, **kwargs)

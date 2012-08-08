@@ -97,7 +97,7 @@ def schedule_run_instance(context, **kwargs):
     rpc.cast(context, FLAGS.cells_topic, message)
 
 
-def call_dbapi_method(context, method, *args, **kwargs):
+def call_dbapi_method(context, method, args, kwargs, sub_topic=None):
     """Broadcast message up, saying to call a DB API method."""
     db_method_info = {'method': method,
                       'method_args': args,
@@ -105,7 +105,10 @@ def call_dbapi_method(context, method, *args, **kwargs):
     bcast_message = cells_utils.form_broadcast_message('up',
             'call_dbapi_method',
             {'db_method_info': db_method_info})
-    rpc.cast(context, FLAGS.cells_topic, bcast_message)
+    topic = FLAGS.cells_topic
+    if sub_topic:
+        topic += '.bw_updates'
+    rpc.cast(context, topic, bcast_message)
 
 
 def instance_update(context, instance):
@@ -134,7 +137,8 @@ def instance_fault_create(context, instance_fault):
     items_to_remove = ['id']
     for key in items_to_remove:
         instance_fault.pop(key, None)
-    call_dbapi_method(context, 'instance_fault_create', instance_fault)
+    call_dbapi_method(context, 'instance_fault_create',
+            (instance_fault, ))
 
 
 def block_device_mapping_create(context, bdm):
@@ -146,7 +150,8 @@ def block_device_mapping_create(context, bdm):
     items_to_remove = ['id']
     for key in items_to_remove:
         bdm.pop(key, None)
-    call_dbapi_method(context, 'block_device_mapping_create', bdm)
+    call_dbapi_method(context, 'block_device_mapping_create',
+            (bdm, ))
 
 
 def block_device_mapping_destroy(context, instance_uuid, volume_id):
@@ -155,22 +160,22 @@ def block_device_mapping_destroy(context, instance_uuid, volume_id):
         return
     call_dbapi_method(context,
             'block_device_mapping_destroy_by_instance_and_volume',
-            instance_uuid, volume_id)
+            (instance_uuid, volume_id))
 
 
 def volume_attached(context, volume_id, instance_uuid, mountpoint):
     """Broadcast upwards that a volume was updated."""
     if not FLAGS.enable_cells:
         return
-    call_dbapi_method(context, 'volume_attached', volume_id,
-            instance_uuid, mountpoint)
+    call_dbapi_method(context, 'volume_attached', (volume_id,
+            instance_uuid, mountpoint))
 
 
 def volume_detached(context, volume_id):
     """Broadcast upwards that a volume was updated."""
     if not FLAGS.enable_cells:
         return
-    call_dbapi_method(context, 'volume_detached', volume_id)
+    call_dbapi_method(context, 'volume_detached', (volume_id, ))
 
 
 def volume_unreserved(context, volume_id):
@@ -188,14 +193,15 @@ def bw_usage_update(context, *args, **kwargs):
     """Broadcast upwards that bw_usage was updated."""
     if not FLAGS.enable_cells:
         return
-    call_dbapi_method(context, 'bw_usage_update', *args, **kwargs)
+    call_dbapi_method(context, 'bw_usage_update',
+            args, kwargs, sub_topic='bw_updates')
 
 
 def instance_metadata_update(context, *args, **kwargs):
     """Broadcast upwards that bw_usage was updated."""
     if not FLAGS.enable_cells:
         return
-    call_dbapi_method(context, 'instance_metadata_update', *args, **kwargs)
+    call_dbapi_method(context, 'instance_metadata_update', args, kwargs)
 
 
 def get_all_cell_info(context):

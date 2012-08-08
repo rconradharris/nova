@@ -120,7 +120,7 @@ class FakeCellsManager(manager.CellsManager):
         return TEST_METHOD_EXPECTED_RESULT
 
     def send_raw_message_to_cell(self, context, cell, message,
-            dest_host=None, fanout=False):
+            dest_host=None, fanout=False, topic=None):
         self._test_call_info['send_message'] += 1
         if fanout:
             self._test_call_info['send_message_fanout'] += 1

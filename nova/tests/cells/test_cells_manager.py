@@ -203,7 +203,7 @@ class CellsManagerClassTestCase(test.TestCase):
         info = {}
 
         def send_raw_message_to_cell(context, cell, message,
-                dest_host=None):
+                dest_host=None, topic=None):
             # Catch response coming up and store the dest_host
             # so we can make sure responses send to the
             # appropriate host queue of the src
@@ -514,7 +514,7 @@ class CellsManagerClassTestCase(test.TestCase):
         call_info = {'send_message': 0}
 
         def fake_send_message_to_cell(context, cell, dest_host, message,
-                fanout=False):
+                fanout=False, topic=None):
             self.assertEqual(context, fake_context)
             self.assertEqual(cell, fake_cell)
             self.assertEqual(message, fake_message)
@@ -663,7 +663,8 @@ class CellsManagerClassTestCase(test.TestCase):
 
         call_info = {'broadcast': 0}
 
-        def send_raw_message_to_cells(context, cells, bcast_message):
+        def send_raw_message_to_cells(context, cells, bcast_message,
+                **kwargs):
             self.assertEqual(context, fake_context)
             self.assertEqual(bcast_message['method'], 'broadcast_message')
             message = bcast_message['args']['message']

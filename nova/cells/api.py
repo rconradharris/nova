@@ -107,7 +107,7 @@ def call_dbapi_method(context, method, args, kwargs, sub_topic=None):
             {'db_method_info': db_method_info})
     topic = FLAGS.cells_topic
     if sub_topic:
-        topic += '.bw_updates'
+        topic += '.' + sub_topic
     rpc.cast(context, topic, bcast_message)
 
 

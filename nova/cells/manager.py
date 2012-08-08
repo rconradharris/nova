@@ -124,7 +124,6 @@ class CellsBWUpdateManager(manager.Manager):
         self.cells_manager = cells_manager
 
     def __getattr__(self, key):
-        """Makes all scheduler_ methods pass through to scheduler"""
         return getattr(self.cells_manager, key)
 
 
@@ -134,7 +133,6 @@ class CellsReplyManager(manager.Manager):
         self.cells_manager = cells_manager
 
     def __getattr__(self, key):
-        """Makes all scheduler_ methods pass through to scheduler"""
         return getattr(self.cells_manager, key)
 
 

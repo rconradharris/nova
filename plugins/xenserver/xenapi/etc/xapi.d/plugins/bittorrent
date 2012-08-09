@@ -34,8 +34,8 @@ import utils
 from pluginlib_nova import *
 configure_logging('bittorrent')
 
-DEFAULT_TORRENT_CACHE = '/tmp/torrents'
-DEFAULT_SEED_CACHE = '/tmp/seeds'
+DEFAULT_TORRENT_CACHE = '/images/torrents'
+DEFAULT_SEED_CACHE = '/images/seeds'
 
 
 def _fetch_torrent_file(image_id, torrent_base_url):

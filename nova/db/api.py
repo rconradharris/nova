@@ -1326,7 +1326,7 @@ def block_device_mapping_destroy(context, bdm_id):
 
 
 def block_device_mapping_destroy_by_instance_and_volume(context,
-        instance_uuid, volume_id, update_cells=False):
+        instance_uuid, volume_id, update_cells=True):
     """Destroy the block device mapping or raise if it does not exist."""
     rv = IMPL.block_device_mapping_destroy_by_instance_and_volume(
         context, instance_uuid, volume_id)

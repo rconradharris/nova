@@ -1064,7 +1064,6 @@ def _fetch_vhd_image(context, session, instance, image_id):
 
         callback = pick_glance
 
-    plugin_name = 'glance'
     vdis = _fetch_using_dom0_plugin_with_retry(
             context, session, image_id, plugin_name, params,
             callback=callback)

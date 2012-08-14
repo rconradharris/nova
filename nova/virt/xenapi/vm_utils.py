@@ -1025,6 +1025,8 @@ def _determine_if_image_uses_bittorrent(context, instance):
             bittorrent = utils.bool_from_str(sys_meta['image_bittorrent'])
         except KeyError:
             pass
+    elif xenapi_torrent_images == 'none':
+        pass
     else:
         LOG.warning(_("Invalid value '%s' for xenapi_torrent_images"),
                     xenapi_torrent_images)

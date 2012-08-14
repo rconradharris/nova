@@ -95,7 +95,11 @@ xenapi_vm_utils_opts = [
     cfg.IntOpt('xenapi_torrent_seed_hours',
                default=0,
                help='Number of hours after downloading an image via'
-                    ' BitTorrent that it should be seeded for other peers.')
+                    ' BitTorrent that it should be seeded for other peers.'),
+    cfg.IntOpt('xenapi_torrent_max_last_accessed',
+               default=86400,
+               help='Cached torrent files not accessed within this number of'
+                    ' seconds can be reaped')
     ]
 
 FLAGS = flags.FLAGS
@@ -1054,6 +1058,8 @@ def _fetch_vhd_image(context, session, instance, image_id):
         params['torrent_base_url'] = FLAGS.xenapi_torrent_base_url
         params['torrent_seed_hours'] = FLAGS.xenapi_torrent_seed_hours
         params['torrent_seed_chance'] = FLAGS.xenapi_torrent_seed_chance
+        params['torrent_max_last_accessed'] =\
+                FLAGS.xenapi_torrent_max_last_accessed
     else:
         plugin_name = 'glance'
 

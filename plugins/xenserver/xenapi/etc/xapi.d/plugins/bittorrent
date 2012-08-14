@@ -25,6 +25,7 @@ except ImportError:
 import os
 import random
 import shutil
+import time
 
 import urllib2
 import XenAPIPlugin
@@ -39,13 +40,29 @@ DEFAULT_TORRENT_CACHE = '/images/torrents'
 DEFAULT_SEED_CACHE = '/images/seeds'
 
 
-def _fetch_torrent_file(image_id, torrent_base_url):
+def _delete_if_exists(path):
+    # TODO(sirp): this could eventually go in plugin/utils.py, when BT merges
+    # into trunk
+    try:
+        os.unlink(path)
+    except OSError, e:
+        if e.errno == errno.ENOENT:
+            logging.warning("'%s' was already deleted, skipping delete" % path)
+        else:
+            raise
+
+
+def _make_torrent_cache():
     torrent_cache_path = os.environ.get(
             'TORRENT_CACHE', DEFAULT_TORRENT_CACHE)
 
     if not os.path.exists(torrent_cache_path):
         os.mkdir(torrent_cache_path)
 
+    return torrent_cache_path
+
+
+def _fetch_torrent_file(torrent_cache_path, image_id, torrent_base_url):
     torrent_path = os.path.join(
             torrent_cache_path, image_id + '.torrent')
 
@@ -61,6 +78,24 @@ def _fetch_torrent_file(image_id, torrent_base_url):
             local_torrent_file.close()
 
     return torrent_path
+
+
+def _reap_old_torrent_files(torrent_cache_path, torrent_max_last_accessed):
+    """Delete any torrent files that haven't been accessed recently."""
+    if not torrent_max_last_accessed:
+        logging.debug("Reaping old torrent files disabled, skipping...")
+        return
+
+    logging.debug("Preparing to reap old torrent files,"
+                  " torrent_max_last_accessed=%d" % torrent_max_last_accessed)
+
+    for fname in os.listdir(torrent_cache_path):
+        torrent_path = os.path.join(torrent_cache_path, fname)
+        last_accessed = time.time() - os.path.getatime(torrent_path)
+        if last_accessed > torrent_max_last_accessed:
+            logging.debug("Reaping '%s', last_accessed=%d" % (
+                          torrent_path, last_accessed))
+            _delete_if_exists(torrent_path)
 
 
 def _ctorrent(torrent_path, save_as_path, torrent_seed_hours=None,
@@ -107,7 +142,6 @@ def _seed(seed_cache_path, tarball_path, torrent_path, torrent_seed_hours,
         utils._rename(tarball_path, seed_path)
 
         # Daemonize and seed the image
-        # TODO(sirp): we should delete the file once the seed process dies
         _ctorrent(torrent_path, seed_path,
                   torrent_seed_hours=torrent_seed_hours, daemon=True)
     else:
@@ -125,6 +159,7 @@ def _extract_tarball(tarball_path, staging_path):
 
 def _reap_finished_seeds(seed_cache_path):
     """Delete any cached seeds where the seeder process has died."""
+    logging.debug("Preparing to reap finished seeds")
     missing = {}
     for fname in os.listdir(seed_cache_path):
         seed_path = os.path.join(seed_cache_path, fname)
@@ -142,14 +177,7 @@ def _reap_finished_seeds(seed_cache_path):
 
     for seed_path in missing:
         logging.debug("Reaping cached seed '%s'" % seed_path)
-        try:
-            os.unlink(seed_path)
-        except OSError, e:
-            # Avoid race where somebody else may have deleted the seed
-            if e.errno == errno.ENOENT:
-                logging.warning("Seed '%s' was already deleted" % seed_path)
-            else:
-                raise
+        _delete_if_exists(seed_path)
 
 
 def _make_seed_cache():
@@ -168,13 +196,19 @@ def download_vhd(session, args):
     torrent_base_url = params["torrent_base_url"]
     torrent_seed_hours = params["torrent_seed_hours"]
     torrent_seed_chance = params["torrent_seed_chance"]
+    torrent_max_last_accessed = params["torrent_max_last_accessed"]
     uuid_stack = params["uuid_stack"]
     sr_path = params["sr_path"]
 
     seed_cache_path = _make_seed_cache()
-    _reap_finished_seeds(seed_cache_path)
+    torrent_cache_path = _make_torrent_cache()
 
-    torrent_path = _fetch_torrent_file(image_id, torrent_base_url)
+    # Housekeeping
+    _reap_finished_seeds(seed_cache_path)
+    _reap_old_torrent_files(torrent_cache_path, torrent_max_last_accessed)
+
+    torrent_path = _fetch_torrent_file(
+            torrent_cache_path, image_id, torrent_base_url)
 
     staging_path = utils.make_staging_area(sr_path)
     try:

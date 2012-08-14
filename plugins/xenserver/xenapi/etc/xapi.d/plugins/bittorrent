@@ -77,27 +77,28 @@ def _ctorrent(torrent_path, save_as_path, torrent_seed_hours=None,
     utils.finish_subprocess(torrent_proc, torrent_cmd)
 
 
-def _download_via_bittorrent(torrent_path, tarball_path, torrent_seed_hours,
-                              torrent_seed_chance):
-    _ctorrent(torrent_path, tarball_path, torrent_seed_hours=0)
+def _should_seed(torrent_seed_hours, torrent_seed_chance):
+    return torrent_seed_hours and (random.random() <= torrent_seed_chance)
 
-    if torrent_seed_hours and random.random() <= torrent_seed_chance:
-        seed_cache_path = os.environ.get('SEED_CACHE', DEFAULT_SEED_CACHE)
 
-        if not os.path.exists(seed_cache_path):
-            os.mkdir(seed_cache_path)
+def _seed(torrent_path, tarball_path, torrent_seed_hours):
+    # Make seed cache directory if needed
+    seed_cache_path = os.environ.get('SEED_CACHE', DEFAULT_SEED_CACHE)
+    if not os.path.exists(seed_cache_path):
+        os.mkdir(seed_cache_path)
 
-        # Make a copy of the file so that we can seed it
-        seed_filename = os.path.basename(tarball_path)
-        seed_path = os.path.join(seed_cache_path, seed_filename)
-        shutil.copyfile(tarball_path, seed_path)
+    # Move tarball into seed cache
+    seed_filename = os.path.basename(tarball_path)
+    seed_path = os.path.join(seed_cache_path, seed_filename)
 
-        # Daemonize and seed the image
-        # TODO(sirp): we should delete the file once the seed process dies
-        _ctorrent(torrent_path, seed_path,
-                  torrent_seed_hours=torrent_seed_hours, daemon=True)
+    logging.debug("Preparing to seed '%s' for %d hours" % (
+                  seed_path, torrent_seed_hours))
+    utils._rename(tarball_path, seed_path)
 
-    return tarball_path
+    # Daemonize and seed the image
+    # TODO(sirp): we should delete the file once the seed process dies
+    _ctorrent(torrent_path, seed_path, torrent_seed_hours=torrent_seed_hours,
+              daemon=True)
 
 
 def _extract_tarball(tarball_path, staging_path):
@@ -107,7 +108,6 @@ def _extract_tarball(tarball_path, staging_path):
         utils.extract_tarball(tarball_fileobj, staging_path)
     finally:
         tarball_fileobj.close()
-        os.unlink(tarball_path)
 
 
 def download_vhd(session, args):
@@ -131,15 +131,20 @@ def download_vhd(session, args):
         tarball_path = os.path.join(staging_path, tarball_filename)
 
         # Download tarball into staging area
-        _download_via_bittorrent(
-                torrent_path, tarball_path, torrent_seed_hours,
-                torrent_seed_chance)
+        _ctorrent(torrent_path, tarball_path, torrent_seed_hours=0)
 
         # Extract the tarball into the staging area
         _extract_tarball(tarball_path, staging_path)
 
         # Move the VHDs from the staging area into the storage repository
         vdi_list = utils.import_vhds(sr_path, staging_path, uuid_stack)
+
+        # Seed image for others
+        if _should_seed(torrent_seed_hours, torrent_seed_chance):
+            _seed(torrent_path, tarball_path, torrent_seed_hours)
+        else:
+            logging.debug("Seeding skipped!")
+            os.unlink(tarball_path)
     finally:
         utils.cleanup_staging_area(staging_path)
 

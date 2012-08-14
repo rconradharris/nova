@@ -17,6 +17,7 @@
 """Download images via BitTorrent."""
 
 import cPickle as pickle
+import errno
 try:
     import json
 except ImportError:
@@ -95,12 +96,8 @@ def _should_seed(seed_path, torrent_seed_hours, torrent_seed_chance):
     return True
 
 
-def _seed(tarball_path, torrent_path, torrent_seed_hours, torrent_seed_chance):
-    # Make seed cache directory if needed
-    seed_cache_path = os.environ.get('SEED_CACHE', DEFAULT_SEED_CACHE)
-    if not os.path.exists(seed_cache_path):
-        os.mkdir(seed_cache_path)
-
+def _seed(seed_cache_path, tarball_path, torrent_path, torrent_seed_hours,
+          torrent_seed_chance):
     seed_filename = os.path.basename(tarball_path)
     seed_path = os.path.join(seed_cache_path, seed_filename)
 
@@ -126,6 +123,42 @@ def _extract_tarball(tarball_path, staging_path):
         tarball_fileobj.close()
 
 
+def _reap_finished_seeds(seed_cache_path):
+    """Delete any cached seeds where the seeder process has died."""
+    missing = {}
+    for fname in os.listdir(seed_cache_path):
+        seed_path = os.path.join(seed_cache_path, fname)
+        missing[seed_path] = None
+
+    pids = [pid for pid in os.listdir('/proc') if pid.isdigit()]
+    for pid in pids:
+        cmdline = open(os.path.join('/proc', pid, 'cmdline'), 'rb').read()
+        if 'ctorrent' not in cmdline:
+            continue
+
+        for seed_path in missing.keys():
+            if seed_path in cmdline:
+                del missing[seed_path]
+
+    for seed_path in missing:
+        logging.debug("Reaping cached seed '%s'" % seed_path)
+        try:
+            os.unlink(seed_path)
+        except OSError, e:
+            # Avoid race where somebody else may have deleted the seed
+            if e.errno == errno.ENOENT:
+                logging.warning("Seed '%s' was already deleted" % seed_path)
+            else:
+                raise
+
+
+def _make_seed_cache():
+    seed_cache_path = os.environ.get('SEED_CACHE', DEFAULT_SEED_CACHE)
+    if not os.path.exists(seed_cache_path):
+        os.mkdir(seed_cache_path)
+    return seed_cache_path
+
+
 def download_vhd(session, args):
     """Download an image from BitTorrent, unbundle it, and then deposit the
     VHDs into the storage repository
@@ -137,6 +170,9 @@ def download_vhd(session, args):
     torrent_seed_chance = params["torrent_seed_chance"]
     uuid_stack = params["uuid_stack"]
     sr_path = params["sr_path"]
+
+    seed_cache_path = _make_seed_cache()
+    _reap_finished_seeds(seed_cache_path)
 
     torrent_path = _fetch_torrent_file(image_id, torrent_base_url)
 
@@ -156,7 +192,7 @@ def download_vhd(session, args):
         vdi_list = utils.import_vhds(sr_path, staging_path, uuid_stack)
 
         # Seed image for others in the swarm
-        _seed(tarball_path, torrent_path, torrent_seed_hours,
+        _seed(seed_cache_path, tarball_path, torrent_path, torrent_seed_hours,
               torrent_seed_chance)
     finally:
         utils.cleanup_staging_area(staging_path)

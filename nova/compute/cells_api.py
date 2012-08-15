@@ -23,15 +23,32 @@ from nova.compute import task_states
 from nova.compute import vm_states
 from nova import exception
 from nova import flags
+from nova.openstack.common import cfg
+from nova.openstack.common import jsonutils
 from nova.openstack.common import log as logging
 from nova import utils
 
+flag_opts = [
+        cfg.StrOpt('cells_config_file',
+                   default=None,
+                   help="Configuration file for cells")
+]
+
 FLAGS = flags.FLAGS
+FLAGS.register_opts(flag_opts)
 LOG = logging.getLogger('nova.compute.cells_api')
 
 
 check_instance_state = compute_api.check_instance_state
 wrap_check_policy = compute_api.wrap_check_policy
+
+
+def validate_cell(fn):
+    def _wrapped(self, context, instance, *args, **kwargs):
+        self._validate_cell(instance, fn.__name__)
+        return fn(self, context, instance, *args, **kwargs)
+    _wrapped.__name__ = fn.__name__
+    return _wrapped
 
 
 class ComputeRPCAPINoOp(object):
@@ -58,6 +75,44 @@ class ComputeCellsAPI(compute_api.API):
         self.compute_rpcapi = ComputeRPCAPINoOp()
         # Redirect scheduler run_instance to cells.
         self.scheduler_rpcapi = SchedulerRPCAPIRedirect()
+        cells_config_file = FLAGS.cells_config_file
+        if cells_config_file:
+            self._cells_config_file = FLAGS.find_file(cells_config_file)
+        else:
+            self._cells_config_file = None
+        self._cells_config_cacheinfo = {}
+        self._cells_config = {}
+        self._reload_cells_config()
+
+    def _reload_cells_config(self):
+        def _reload(data):
+            self._cells_config = jsonutils.loads(data)
+
+        if not self._cells_config_file:
+            cells_config_file = FLAGS.cells_config_file
+            if cells_config_file:
+                # See if it exists now
+                self._cells_config_file = FLAGS.find_file(cells_config_file)
+
+        if self._cells_config_file:
+            utils.read_cached_file(self._cells_config_file,
+                    self._cells_config_cacheinfo, reload_func=_reload)
+
+    def _cell_read_only(self, cell_name):
+        self._reload_cells_config()
+        cell_info = self._cells_config.get(cell_name, {})
+        return cell_info.get('read_only', False)
+
+    def _validate_cell(self, instance, method):
+        cell_name = instance['cell_name']
+        if not cell_name:
+            raise exception.InstanceUnknownCell(instance_id=instance['uuid'])
+        if self._cell_read_only(cell_name):
+            raise exception.InstanceInvalidState(
+                    attr="vm_state",
+                    instance_uuid=instance['uuid'],
+                    state="temporary_readonly",
+                    method=method)
 
     def _cast_to_cells(self, context, instance, method, *args, **kwargs):
         instance_uuid = instance['uuid']
@@ -154,6 +209,7 @@ class ComputeCellsAPI(compute_api.API):
             refs_ret.extend(refs)
         return (refs_ret, reservation_id)
 
+    @validate_cell
     def update(self, context, instance, **kwargs):
         """Update an instance."""
         rv = super(ComputeCellsAPI, self).update(context,
@@ -172,6 +228,7 @@ class ComputeCellsAPI(compute_api.API):
                 pass
         return rv
 
+    @validate_cell
     def soft_delete(self, context, instance):
         """Terminate an instance."""
         super(ComputeCellsAPI, self).soft_delete(context, instance)
@@ -179,6 +236,15 @@ class ComputeCellsAPI(compute_api.API):
 
     def delete(self, context, instance):
         """Terminate an instance."""
+        # We can't use the decorator because we have special logic in the
+        # case we don't know the cell_name...
+        cell_name = instance['cell_name']
+        if cell_name and self._cell_read_only(cell_name):
+            raise exception.InstanceInvalidState(
+                    attr="vm_state",
+                    instance_uuid=instance['uuid'],
+                    state="temporary_readonly",
+                    method='delete')
         super(ComputeCellsAPI, self).delete(context, instance)
         try:
             self._cast_to_cells(context, instance, 'delete')
@@ -191,16 +257,19 @@ class ComputeCellsAPI(compute_api.API):
             cells_api.broadcast_service_api_method(context, 'compute',
                     'delete', instance['uuid'])
 
+    @validate_cell
     def restore(self, context, instance):
         """Restore a previously deleted (but not reclaimed) instance."""
         super(ComputeCellsAPI, self).restore(context, instance)
         self._cast_to_cells(context, instance, 'restore')
 
+    @validate_cell
     def force_delete(self, context, instance):
         """Force delete a previously deleted (but not reclaimed) instance."""
         super(ComputeCellsAPI, self).force_delete(context, instance)
         self._cast_to_cells(context, instance, 'force_delete')
 
+    @validate_cell
     def stop(self, context, instance, do_cast=True):
         """Stop an instance."""
         super(ComputeCellsAPI, self).stop(context, instance)
@@ -210,11 +279,13 @@ class ComputeCellsAPI(compute_api.API):
             return self._call_to_cells(context, instance, 'stop',
                     do_cast=False)
 
+    @validate_cell
     def start(self, context, instance):
         """Start an instance."""
         super(ComputeCellsAPI, self).start(context, instance)
         self._cast_to_cells(context, instance, 'start')
 
+    @validate_cell
     def reboot(self, context, instance, *args, **kwargs):
         """Reboot the given instance."""
         super(ComputeCellsAPI, self).reboot(context, instance,
@@ -222,6 +293,7 @@ class ComputeCellsAPI(compute_api.API):
         self._cast_to_cells(context, instance, 'reboot', *args,
                 **kwargs)
 
+    @validate_cell
     def rebuild(self, context, instance, *args, **kwargs):
         """Rebuild the given instance with the provided attributes."""
         super(ComputeCellsAPI, self).rebuild(context, instance, *args,
@@ -229,6 +301,7 @@ class ComputeCellsAPI(compute_api.API):
         self._cast_to_cells(context, instance, 'rebuild', *args, **kwargs)
 
     @check_instance_state(vm_state=[vm_states.RESIZED])
+    @validate_cell
     def revert_resize(self, context, instance):
         """Reverts a resize, deleting the 'new' instance in the process."""
         # NOTE(markwash): regular api manipulates the migration here, but we
@@ -239,6 +312,7 @@ class ComputeCellsAPI(compute_api.API):
         self._cast_to_cells(context, instance, 'revert_resize')
 
     @check_instance_state(vm_state=[vm_states.RESIZED])
+    @validate_cell
     def confirm_resize(self, context, instance):
         """Confirms a migration/resize and deletes the 'old' instance."""
         # NOTE(markwash): regular api manipulates migration here, but we don't
@@ -250,6 +324,7 @@ class ComputeCellsAPI(compute_api.API):
 
     @check_instance_state(vm_state=[vm_states.ACTIVE, vm_states.STOPPED],
                           task_state=[None])
+    @validate_cell
     def resize(self, context, instance, *args, **kwargs):
         """Resize (ie, migrate) a running instance.
 
@@ -263,6 +338,7 @@ class ComputeCellsAPI(compute_api.API):
         # that'll unfold it
         self._cast_to_cells(context, instance, 'resize', *args, **kwargs)
 
+    @validate_cell
     def add_fixed_ip(self, context, instance, *args, **kwargs):
         """Add fixed_ip from specified network to given instance."""
         super(ComputeCellsAPI, self).add_fixed_ip(context, instance,
@@ -270,6 +346,7 @@ class ComputeCellsAPI(compute_api.API):
         self._cast_to_cells(context, instance, 'add_fixed_ip',
                 *args, **kwargs)
 
+    @validate_cell
     def remove_fixed_ip(self, context, instance, *args, **kwargs):
         """Remove fixed_ip from specified network to given instance."""
         super(ComputeCellsAPI, self).remove_fixed_ip(context, instance,
@@ -277,11 +354,13 @@ class ComputeCellsAPI(compute_api.API):
         self._cast_to_cells(context, instance, 'remove_fixed_ip',
                 *args, **kwargs)
 
+    @validate_cell
     def pause(self, context, instance):
         """Pause the given instance."""
         super(ComputeCellsAPI, self).pause(context, instance)
         self._cast_to_cells(context, instance, 'pause')
 
+    @validate_cell
     def unpause(self, context, instance):
         """Unpause the given instance."""
         super(ComputeCellsAPI, self).unpause(context, instance)
@@ -311,16 +390,19 @@ class ComputeCellsAPI(compute_api.API):
         super(ComputeCellsAPI, self).get_actions(context, instance)
         return self._call_to_cells(context, instance, 'get_actions')
 
+    @validate_cell
     def suspend(self, context, instance):
         """Suspend the given instance."""
         super(ComputeCellsAPI, self).suspend(context, instance)
         self._cast_to_cells(context, instance, 'suspend')
 
+    @validate_cell
     def resume(self, context, instance):
         """Resume the given instance."""
         super(ComputeCellsAPI, self).resume(context, instance)
         self._cast_to_cells(context, instance, 'resume')
 
+    @validate_cell
     def rescue(self, context, instance, rescue_password=None):
         """Rescue the given instance."""
         super(ComputeCellsAPI, self).rescue(context, instance,
@@ -328,11 +410,13 @@ class ComputeCellsAPI(compute_api.API):
         self._cast_to_cells(context, instance, 'rescue',
                 rescue_password=rescue_password)
 
+    @validate_cell
     def unrescue(self, context, instance):
         """Unrescue the given instance."""
         super(ComputeCellsAPI, self).unrescue(context, instance)
         self._cast_to_cells(context, instance, 'unrescue')
 
+    @validate_cell
     def set_admin_password(self, context, instance, password=None):
         """Set the root/admin password for the given instance."""
         super(ComputeCellsAPI, self).set_admin_password(context, instance,
@@ -340,6 +424,7 @@ class ComputeCellsAPI(compute_api.API):
         self._cast_to_cells(context, instance, 'set_admin_password',
                 password=password)
 
+    @validate_cell
     def inject_file(self, context, instance, *args, **kwargs):
         """Write a file to the given instance."""
         super(ComputeCellsAPI, self).inject_file(context, instance, *args,
@@ -347,6 +432,7 @@ class ComputeCellsAPI(compute_api.API):
         self._cast_to_cells(context, instance, 'inject_file', *args, **kwargs)
 
     @wrap_check_policy
+    @validate_cell
     def get_vnc_console(self, context, instance, console_type):
         """Get a url to a VNC Console."""
         # NOTE(comstud): This might not need to go through cells?
@@ -358,6 +444,7 @@ class ComputeCellsAPI(compute_api.API):
                 connect_info['port'], connect_info['internal_access_path'])
         return {'url': connect_info['access_url']}
 
+    @validate_cell
     def get_console_output(self, context, instance, *args, **kwargs):
         """Get console output for an an instance."""
         # NOTE(comstud): Calling super() just to get policy check
@@ -376,17 +463,20 @@ class ComputeCellsAPI(compute_api.API):
         super(ComputeCellsAPI, self).lock(context, instance)
         self._cast_to_cells(context, instance, 'unlock')
 
+    @validate_cell
     def reset_network(self, context, instance):
         """Reset networking on the instance."""
         super(ComputeCellsAPI, self).reset_network(context, instance)
         self._cast_to_cells(context, instance, 'reset_network')
 
+    @validate_cell
     def inject_network_info(self, context, instance):
         """Inject network info for the instance."""
         super(ComputeCellsAPI, self).inject_network_info(context, instance)
         self._cast_to_cells(context, instance, 'inject_network_info')
 
     @wrap_check_policy
+    @validate_cell
     def attach_volume(self, context, instance, volume_id, device):
         """Attach an existing volume to an existing instance."""
         if not re.match("^/dev/x{0,1}[a-z]d[a-z]+$", device):
@@ -397,6 +487,7 @@ class ComputeCellsAPI(compute_api.API):
                 volume_id, device)
 
     @wrap_check_policy
+    @validate_cell
     def detach_volume(self, context, instance, volume):
         """Detach a volume from an instance."""
         # FIXME(comstud): this call should be in volume i think?
@@ -405,6 +496,7 @@ class ComputeCellsAPI(compute_api.API):
                 dict(volume.iteritems()))
 
     @wrap_check_policy
+    @validate_cell
     def associate_floating_ip(self, context, instance, address):
         """Makes calls to network_api to associate_floating_ip.
 
@@ -413,6 +505,7 @@ class ComputeCellsAPI(compute_api.API):
         self._cast_to_cells(context, instance, 'associate_floating_ip',
                 address)
 
+    @validate_cell
     def delete_instance_metadata(self, context, instance, key):
         """Delete the given metadata item from an instance."""
         super(ComputeCellsAPI, self).delete_instance_metadata(context,
@@ -421,6 +514,7 @@ class ComputeCellsAPI(compute_api.API):
                 key)
 
     @wrap_check_policy
+    @validate_cell
     def update_instance_metadata(self, context, instance,
                                  metadata, delete=False):
         rv = super(ComputeCellsAPI, self).update_instance_metadata(context,

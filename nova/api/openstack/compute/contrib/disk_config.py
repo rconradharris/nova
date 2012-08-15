@@ -139,6 +139,8 @@ class ServerDiskConfigController(wsgi.Controller):
     def create(self, req, body):
         context = req.environ['nova.context']
         if authorize(context):
+            if 'server' not in body:
+                return
             self._set_disk_config(body['server'])
             resp_obj = (yield)
             self._show(req, resp_obj)
@@ -147,6 +149,8 @@ class ServerDiskConfigController(wsgi.Controller):
     def update(self, req, id, body):
         context = req.environ['nova.context']
         if authorize(context):
+            if 'server' not in body:
+                return
             self._set_disk_config(body['server'])
             resp_obj = (yield)
             self._show(req, resp_obj)
@@ -155,6 +159,8 @@ class ServerDiskConfigController(wsgi.Controller):
     def _action_rebuild(self, req, id, body):
         context = req.environ['nova.context']
         if authorize(context):
+            if 'rebuild' not in body:
+                return
             self._set_disk_config(body['rebuild'])
             resp_obj = (yield)
             self._show(req, resp_obj)
@@ -163,6 +169,8 @@ class ServerDiskConfigController(wsgi.Controller):
     def _action_resize(self, req, id, body):
         context = req.environ['nova.context']
         if authorize(context):
+            if 'resize' not in body:
+                return
             self._set_disk_config(body['resize'])
             yield
 

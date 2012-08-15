@@ -94,6 +94,14 @@ class RackspaceHostManager(host_manager.HostManager):
         # need to get the total number of hosts below.  Turn it back into
         # a list..
         hosts = [host for host in hosts]
+        # Allow scheduler hint of '0z0ne_target_host' to force a build
+        # to a specific host without any other checks.
+        scheduler_hints = filter_properties.get('scheduler_hints') or {}
+        target_host = scheduler_hints.get('0z0ne_target_host', None)
+        if target_host:
+            filtered_hosts = [host for host in hosts
+                    if host.host == target_host]
+            return filtered_hosts
         filtered_hosts = super(RackspaceHostManager, self).filter_hosts(
                 iter(hosts), filter_properties, filters=filters)
         # Do some fudging for reserving some empty hosts for 30G instances

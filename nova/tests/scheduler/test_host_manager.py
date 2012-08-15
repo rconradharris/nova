@@ -68,7 +68,7 @@ class HostManagerTestCase(test.TestCase):
         fake_host1 = host_manager.HostState('host1', topic)
         fake_host2 = host_manager.HostState('host2', topic)
         hosts = [fake_host1, fake_host2]
-        filter_properties = 'fake_properties'
+        filter_properties = {'moocow': True}
 
         self.mox.StubOutWithMock(self.host_manager,
                 '_choose_host_filters')

@@ -198,7 +198,7 @@ class Os_networksv2(extensions.ExtensionDescriptor):
         return [ext]
 
 
-def _sync_networks(context, user_id, project_id, session):
+def _sync_networks(context, project_id, session):
     # NOTE(jkoelker) The duece only cares about the project_id
     ctx = nova_context.RequestContext(user_id=None, project_id=project_id)
     networks = NetworkAPIProxy().get_all(ctx)

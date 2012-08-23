@@ -76,7 +76,8 @@ def _daemonize(stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
     return True
 
 
-def main(torrent_path, seed_cache_path, torrent_seed_hours):
+def main(torrent_path, seed_cache_path, torrent_seed_hours,
+         torrent_listen_port_start, torrent_listen_port_end):
     torrent_seed_secs = torrent_seed_hours * 60 * 60
     seedtime = time.time() + torrent_seed_secs
     logging.debug("Seeding '%s' for %d secs" % (torrent_path, torrent_seed_secs))
@@ -84,11 +85,10 @@ def main(torrent_path, seed_cache_path, torrent_seed_hours):
     child = _daemonize()
     if not child:
         return
-    
+
     # At this point we're the daemonized child...
     session = libtorrent.session()
-    # TODO: listen on range should be configurable
-    session.listen_on(6881, 6891)
+    session.listen_on(torrent_listen_port_start, torrent_listen_port_end)
 
     torrent_file = open(torrent_path, 'rb')
     try:
@@ -112,6 +112,11 @@ def main(torrent_path, seed_cache_path, torrent_seed_hours):
 
 
 if __name__ == "__main__":
-    torrent_path, seed_cache_path, torrent_seed_hours = sys.argv[1:]
+    (torrent_path, seed_cache_path, torrent_seed_hours,
+     torrent_listen_port_start, torrent_listen_port_end) = sys.argv[1:]
     torrent_seed_hours = int(torrent_seed_hours)
-    main(torrent_path, seed_cache_path, torrent_seed_hours)
+    torrent_listen_port_start = int(torrent_listen_port_start)
+    torrent_listen_port_end = int(torrent_listen_port_end)
+
+    main(torrent_path, seed_cache_path, torrent_seed_hours,
+         torrent_listen_port_start, torrent_listen_port_end)

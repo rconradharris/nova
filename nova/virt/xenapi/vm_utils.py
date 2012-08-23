@@ -99,7 +99,18 @@ xenapi_vm_utils_opts = [
     cfg.IntOpt('xenapi_torrent_max_last_accessed',
                default=86400,
                help='Cached torrent files not accessed within this number of'
-                    ' seconds can be reaped')
+                    ' seconds can be reaped'),
+    cfg.IntOpt('xenapi_torrent_listen_port_start',
+               default=6881,
+               help='Beginning of port range to listen on'),
+    cfg.IntOpt('xenapi_torrent_listen_port_end',
+               default=6891,
+               help='End of port range to listen on'),
+    cfg.IntOpt('xenapi_torrent_download_stall_cutoff',
+               default=600,
+               help='Number of seconds a download can remain at the same'
+                    ' progress percentage w/o being considered a stall')
+
     ]
 
 FLAGS = flags.FLAGS
@@ -1060,6 +1071,12 @@ def _fetch_vhd_image(context, session, instance, image_id):
         params['torrent_seed_chance'] = FLAGS.xenapi_torrent_seed_chance
         params['torrent_max_last_accessed'] =\
                 FLAGS.xenapi_torrent_max_last_accessed
+        params['torrent_listen_port_start'] =\
+                FLAGS.xenapi_torrent_listen_port_start
+        params['torrent_listen_port_end'] =\
+                FLAGS.xenapi_torrent_listen_port_end
+        params['torrent_download_stall_cutoff'] =\
+                FLAGS.xenapi_torrent_download_stall_cutoff
     else:
         plugin_name = 'glance'
 

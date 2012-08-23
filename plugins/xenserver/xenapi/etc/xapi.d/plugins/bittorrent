@@ -18,6 +18,7 @@
 
 import cPickle as pickle
 import errno
+import inspect
 try:
     import json
 except ImportError:
@@ -25,8 +26,10 @@ except ImportError:
 import os
 import random
 import shutil
+import tempfile
 import time
 
+import libtorrent
 import urllib2
 import XenAPIPlugin
 
@@ -38,6 +41,7 @@ configure_logging('bittorrent')
 
 DEFAULT_TORRENT_CACHE = '/images/torrents'
 DEFAULT_SEED_CACHE = '/images/seeds'
+SEEDER_PROCESS = '_bittorrent_seeder'
 
 
 def _delete_if_exists(path):
@@ -70,12 +74,22 @@ def _fetch_torrent_file(torrent_cache_path, image_id, torrent_base_url):
         torrent_url = torrent_base_url + "/%s.torrent" % image_id
         logging.info("Downloading %s" % torrent_url)
 
-        local_torrent_file = open(torrent_path, 'wb')
+        # Write contents to temporary path to ensure we don't have partially
+        # completed files in the cache.
+        temp_directory = tempfile.mkdtemp(dir=torrent_cache_path)
         try:
-            remote_torrent_file = urllib2.urlopen(torrent_url)
-            shutil.copyfileobj(remote_torrent_file, local_torrent_file)
+            temp_path = os.path.join(
+                    temp_directory, os.path.basename(torrent_path))
+            temp_file = open(temp_path, 'wb')
+            try:
+                remote_torrent_file = urllib2.urlopen(torrent_url)
+                shutil.copyfileobj(remote_torrent_file, temp_file)
+            finally:
+                temp_file.close()
+
+            os.rename(temp_path, torrent_path)
         finally:
-            local_torrent_file.close()
+            shutil.rmtree(temp_directory)
 
     return torrent_path
 
@@ -98,19 +112,48 @@ def _reap_old_torrent_files(torrent_cache_path, torrent_max_last_accessed):
             _delete_if_exists(torrent_path)
 
 
-def _ctorrent(torrent_path, save_as_path, torrent_seed_hours=None,
-              daemon=False):
-    torrent_cmd = "ctorrent %(torrent_path)s -s %(save_as_path)s" % locals()
+def _download(torrent_path, save_as_path, torrent_listen_port_start,
+              torrent_listen_port_end, torrent_download_stall_cutoff):
+    session = libtorrent.session()
+    session.listen_on(torrent_listen_port_start, torrent_listen_port_end)
+    info = libtorrent.torrent_info(
+        libtorrent.bdecode(open(torrent_path, 'rb').read()))
 
-    if torrent_seed_hours is not None:
-        torrent_cmd += " -e %d" % torrent_seed_hours
+    torrent = session.add_torrent(
+            info, save_as_path,
+            storage_mode=libtorrent.storage_mode_t.storage_mode_sparse)
 
-    if daemon:
-        torrent_cmd += " -d"
+    try:
+        last_progress = 0
+        last_progress_updated = time.time()
 
-    # NOTE(sirp): stdout must be set here otherwise XML parsing breaks.
-    torrent_proc = utils.make_subprocess(torrent_cmd, stdout=True)
-    utils.finish_subprocess(torrent_proc, torrent_cmd)
+        while not torrent.is_seed():
+            s = torrent.status()
+
+            progress = s.progress * 100
+
+            if progress != last_progress:
+                last_progress = progress
+                last_progress_updated = time.time()
+
+            stall_duration = time.time() - last_progress_updated
+            if stall_duration > torrent_download_stall_cutoff:
+                logging.error(
+                    "Download stalled: stall_duration=%d,"
+                    " torrent_download_stall_cutoff=%d" % (
+                    stall_duration, torrent_download_stall_cutoff))
+                raise Exception("Bittorrent download stall detected, bailing!")
+
+            logging.debug(
+                '%.2f%% complete (down: %.1f kb/s up: %.1f kB/s peers: %d)'
+                ' %s %s' % (progress, s.download_rate / 1000,
+                            s.upload_rate / 1000, s.num_peers, s.state,
+                            torrent_path))
+            time.sleep(1)
+    finally:
+        session.remove_torrent(torrent)
+
+    logging.debug("Download of '%s' finished" % torrent_path)
 
 
 def _should_seed(seed_path, torrent_seed_hours, torrent_seed_chance):
@@ -131,8 +174,21 @@ def _should_seed(seed_path, torrent_seed_hours, torrent_seed_chance):
     return True
 
 
-def _seed(seed_cache_path, tarball_path, torrent_path, torrent_seed_hours,
-          torrent_seed_chance):
+def _seed(torrent_path, seed_cache_path, torrent_seed_hours,
+          torrent_listen_port_start, torrent_listen_port_end):
+    plugin_path = os.path.dirname(inspect.getabsfile(inspect.currentframe()))
+    seeder_path = os.path.join(plugin_path, SEEDER_PROCESS)
+    seed_cmd = "%s %s %s %d %d %d" % (
+        seeder_path, torrent_path, seed_cache_path, torrent_seed_hours,
+        torrent_listen_port_start, torrent_listen_port_end)
+
+    seed_proc = utils.make_subprocess(seed_cmd)
+    utils.finish_subprocess(seed_proc, seed_cmd)
+
+
+def _seed_if_needed(seed_cache_path, tarball_path, torrent_path,
+                    torrent_seed_hours, torrent_seed_chance,
+                    torrent_listen_port_start, torrent_listen_port_end):
     seed_filename = os.path.basename(tarball_path)
     seed_path = os.path.join(seed_cache_path, seed_filename)
 
@@ -142,8 +198,8 @@ def _seed(seed_cache_path, tarball_path, torrent_path, torrent_seed_hours,
         utils._rename(tarball_path, seed_path)
 
         # Daemonize and seed the image
-        _ctorrent(torrent_path, seed_path,
-                  torrent_seed_hours=torrent_seed_hours, daemon=True)
+        _seed(torrent_path, seed_cache_path, torrent_seed_hours,
+              torrent_listen_port_start, torrent_listen_port_end)
     else:
         os.unlink(tarball_path)
 
@@ -168,11 +224,12 @@ def _reap_finished_seeds(seed_cache_path):
     pids = [pid for pid in os.listdir('/proc') if pid.isdigit()]
     for pid in pids:
         cmdline = open(os.path.join('/proc', pid, 'cmdline'), 'rb').read()
-        if 'ctorrent' not in cmdline:
+        if SEEDER_PROCESS not in cmdline:
             continue
 
         for seed_path in missing.keys():
-            if seed_path in cmdline:
+            seed_filename = os.path.basename(seed_path)
+            if seed_filename in cmdline:
                 del missing[seed_path]
 
     for seed_path in missing:
@@ -197,6 +254,9 @@ def download_vhd(session, args):
     torrent_seed_hours = params["torrent_seed_hours"]
     torrent_seed_chance = params["torrent_seed_chance"]
     torrent_max_last_accessed = params["torrent_max_last_accessed"]
+    torrent_listen_port_start = params["torrent_listen_port_start"]
+    torrent_listen_port_end = params["torrent_listen_port_end"]
+    torrent_download_stall_cutoff = params["torrent_download_stall_cutoff"]
     uuid_stack = params["uuid_stack"]
     sr_path = params["sr_path"]
 
@@ -217,7 +277,8 @@ def download_vhd(session, args):
         tarball_path = os.path.join(staging_path, tarball_filename)
 
         # Download tarball into staging area
-        _ctorrent(torrent_path, tarball_path, torrent_seed_hours=0)
+        _download(torrent_path, staging_path, torrent_listen_port_start,
+                  torrent_listen_port_end, torrent_download_stall_cutoff)
 
         # Extract the tarball into the staging area
         _extract_tarball(tarball_path, staging_path)
@@ -226,8 +287,9 @@ def download_vhd(session, args):
         vdi_list = utils.import_vhds(sr_path, staging_path, uuid_stack)
 
         # Seed image for others in the swarm
-        _seed(seed_cache_path, tarball_path, torrent_path, torrent_seed_hours,
-              torrent_seed_chance)
+        _seed_if_needed(seed_cache_path, tarball_path, torrent_path,
+                        torrent_seed_hours, torrent_seed_chance,
+                        torrent_listen_port_start, torrent_listen_port_end)
     finally:
         utils.cleanup_staging_area(staging_path)
 

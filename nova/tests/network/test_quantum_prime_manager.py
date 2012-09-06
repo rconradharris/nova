@@ -382,6 +382,34 @@ class Quantum2ManagerTestsAllocateForInstance(test.TestCase):
             allocate_for_instance_networks.assert_called_once_with(*args)
             self.assertTrue(create_and_attach.called)
 
+    def test_allocate_for_instance_with_bad_requested_net_raises(self):
+        with contextlib.nested(
+            mock.patch.object(self.net_manager, '_vifs_to_model'),
+            mock.patch(self.q_client + '.create_and_attach_port'),
+            mock.patch(self.m_client + '.get_networks_for_tenant'),
+            mock.patch(self.m_client + '.allocate_for_instance_networks'),
+            ) as (vifs_to_model,
+                  create_and_attach,
+                  get_networks_for_tenant,
+                  allocate_for_instance_networks):
+
+            # only take the first network for the test
+            networks = _fake_networks(2, self.tenant_id)
+            expected_networks = networks[:1]
+            requested_networks = [(n['network_id'], '')
+                                  for n in expected_networks]
+            # request a bad network
+            bad_rn = ('1 (607) 206-0502 u mad bro?', 'dietz')
+            requested_networks.append(bad_rn)
+
+            self.assertRaises(exception.NetworkNotFound,
+                              self.net_manager.allocate_for_instance,
+                              self.context, instance_id=1,
+                              rxtx_factor=1,
+                              project_id='project1',
+                              requested_networks=requested_networks,
+                              host='host')
+
     def test_allocate_for_instance_no_vifs_raises(self):
         with contextlib.nested(
             mock.patch(self.q_client + '.create_and_attach_port'),

@@ -360,8 +360,14 @@ class QuantumManager(manager.SchedulerDependentManager):
             requested_networks = [self._nw_map.get(rn[0]) or rn[0]
                                   for rn in requested_networks]
             networks.extend(self.m_conn.get_networks_for_tenant(tenant_id))
-            networks = [n for n in networks
-                        if n['network_id'] in requested_networks]
+            nw_dict = dict((n['network_id'], n) for n in networks)
+            networks = []
+            for rn in requested_networks:
+                try:
+                    networks.append(nw_dict[rn])
+                except KeyError:
+                    LOG.exception(_('Bad network_id requested in allocate'))
+                    raise exception.NetworkNotFound(rn)
 
         # Make sure we only request one allocation per network
         networks = set([(net['network_id'],

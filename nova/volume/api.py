@@ -78,7 +78,8 @@ class API(base.Base):
     def __init__(self, image_service=None, **kwargs):
         self.image_service = (image_service or
                               glance.get_default_image_service())
-        self.scheduler_rpcapi = scheduler_rpcapi.SchedulerAPI()
+        rpc_version = "1.0" if FLAGS.enable_cells else None
+        self.scheduler_rpcapi = scheduler_rpcapi.SchedulerAPI(rpc_version)
         super(API, self).__init__(**kwargs)
 
     def create(self, context, size, name, description, snapshot=None,

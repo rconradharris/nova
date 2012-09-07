@@ -120,6 +120,10 @@ class CellInfo(object):
 
 class CellsBWUpdateManager(manager.Manager):
     """Cells RPC consumer manager for BW updates."""
+
+    # NOTE(belliott) temp hack until cells exposes a versioned rpc api
+    RPC_API_VERSION = '1.0'
+
     def __init__(self, cells_manager):
         self.cells_manager = cells_manager
 
@@ -129,6 +133,10 @@ class CellsBWUpdateManager(manager.Manager):
 
 class CellsReplyManager(manager.Manager):
     """Cells RPC consumer manager for replies."""
+
+    # NOTE(belliott) temp hack until cells exposes a versioned rpc api
+    RPC_API_VERSION = '1.0'
+
     def __init__(self, cells_manager):
         self.cells_manager = cells_manager
 
@@ -138,6 +146,9 @@ class CellsReplyManager(manager.Manager):
 
 class CellsManager(manager.Manager):
     """Handles cell communication."""
+
+    # NOTE(belliott) temp hack until cells exposes a versioned rpc api
+    RPC_API_VERSION = '1.0'
 
     def __init__(self, cells_driver_cls=None, cells_scheduler_cls=None,
             cell_info_cls=None, *args, **kwargs):
@@ -961,10 +972,10 @@ class CellsManager(manager.Manager):
         """A parent cell has told us to send our capacity."""
         self._tell_parents_our_capacities(context)
 
-    def create_volume(self, context, topic, **kwargs):
+    def create_volume(self, context, **kwargs):
         msg = {"method": "create_volume",
                "args": kwargs}
-        rpc.cast(context, topic, msg)
+        rpc.cast(context, FLAGS.volume_topic, msg)
 
     def get_service(self, context, routing_path, **kwargs):
         service_id = kwargs.get("service_id")

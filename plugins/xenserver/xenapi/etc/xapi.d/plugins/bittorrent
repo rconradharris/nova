@@ -16,13 +16,8 @@
 
 """Download images via BitTorrent."""
 
-import cPickle as pickle
 import errno
 import inspect
-try:
-    import json
-except ImportError:
-    import simplejson as json
 import os
 import random
 import shutil
@@ -244,22 +239,17 @@ def _make_seed_cache():
     return seed_cache_path
 
 
-def download_vhd(session, args):
+def download_vhd(session, image_id, torrent_base_url, torrent_seed_duration,
+                 torrent_seed_chance, torrent_max_last_accessed,
+                 torrent_listen_port_start, torrent_listen_port_end,
+                 torrent_download_stall_cutoff, uuid_stack, sr_path, **kwargs):
     """Download an image from BitTorrent, unbundle it, and then deposit the
     VHDs into the storage repository
     """
-    params = pickle.loads(exists(args, 'params'))
-    image_id = str(params["image_id"])
-    torrent_base_url = params["torrent_base_url"]
-    torrent_seed_duration = params["torrent_seed_duration"]
-    torrent_seed_chance = params["torrent_seed_chance"]
-    torrent_max_last_accessed = params["torrent_max_last_accessed"]
-    torrent_listen_port_start = params["torrent_listen_port_start"]
-    torrent_listen_port_end = params["torrent_listen_port_end"]
-    torrent_download_stall_cutoff = params["torrent_download_stall_cutoff"]
-    uuid_stack = params["uuid_stack"]
-    sr_path = params["sr_path"]
-
+    # FIXME(sirp): **kwargs is needed in the signature b/c the compute code is
+    # passing in `uuid_stack`, `project_id` and `auth_token` which aren't used.
+    # When this code lands in trunk, we can refactor this to pass only the
+    # parameters that BT actually uses.
     seed_cache_path = _make_seed_cache()
     torrent_cache_path = _make_torrent_cache()
 
@@ -293,10 +283,8 @@ def download_vhd(session, args):
     finally:
         utils.cleanup_staging_area(staging_path)
 
-    # Right now, it's easier to return a single string via XenAPI,
-    # so we'll json encode the list of VHDs.
-    return json.dumps(vdi_list)
+    return vdi_list
 
 
 if __name__ == '__main__':
-    XenAPIPlugin.dispatch({'download_vhd': download_vhd})
+    utils.register_plugin_calls(download_vhd)

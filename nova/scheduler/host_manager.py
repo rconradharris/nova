@@ -218,6 +218,15 @@ class HostManager(object):
 
     def filter_hosts(self, hosts, filter_properties, filters=None):
         """Filter hosts and return only ones passing all filters"""
+        # Allow scheduler hint of '0z0ne_target_host' to force a build
+        # to a specific host without any other checks.
+        scheduler_hints = filter_properties.get('scheduler_hints', {})
+        target_host = scheduler_hints.get('0z0ne_target_host')
+        if target_host:
+            filtered_hosts = [host for host in hosts
+                              if host.host == target_host]
+            return filtered_hosts
+
         filtered_hosts = []
         filter_fns = self._choose_host_filters(filters)
         for host in hosts:

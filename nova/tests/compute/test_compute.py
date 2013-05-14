@@ -8729,3 +8729,73 @@ class ComputeInjectedFilesTestCase(BaseTestCase):
 
         self.compute.run_instance(self.context, self.instance,
                                   injected_files=expected)
+
+"""
+nova/compute/api.py
+562:            if config_drive and not utils.is_valid_boolstr(config_drive):
+
+nova/compute/flavors.py
+131:    if not utils.is_valid_boolstr(is_public):
+
+nova/api/openstack/compute/contrib/volumes.py
+620:        if not utils.is_valid_boolstr(force):
+
+nova/tests/test_utils.py
+363:    def test_is_valid_boolstr(self):
+364:        self.assertTrue(utils.is_valid_boolstr('true'))
+365:        self.assertTrue(utils.is_valid_boolstr('false'))
+366:        self.assertTrue(utils.is_valid_boolstr('yes'))
+367:        self.assertTrue(utils.is_valid_boolstr('no'))
+368:        self.assertTrue(utils.is_valid_boolstr('y'))
+369:        self.assertTrue(utils.is_valid_boolstr('n'))
+370:        self.assertTrue(utils.is_valid_boolstr('1'))
+371:        self.assertTrue(utils.is_valid_boolstr('0'))
+373:        self.assertFalse(utils.is_valid_boolstr('maybe'))
+374:        self.assertFalse(utils.is_valid_boolstr('only on tuesdays'))
+
+nova/utils.py
+666:def is_valid_boolstr(val):
+"""
+class CheckConfigDriveTestCase(test.TestCase):
+    # NOTE(sirp): `TestCase` is far too heavyweight for this test, this should
+    # probably derive from a `test.FastTestCase` that omits DB and env
+    # handling
+    def setUp(self):
+        super(CheckConfigDriveTestCase, self).setUp()
+        self.compute_api = compute.API()
+        self.context = context.RequestContext(
+                'fake_user_id', 'fake_project_id')
+
+    def assertCheck(self, expected, config_drive):
+        self.assertEqual(expected,
+                         self.compute_api._check_config_drive(
+                             self.context, config_drive))
+
+    def test_value_is_none(self):
+        self.assertCheck((None, None), None)
+
+    def test_value_is_bool_like_string(self):
+        self.assertCheck((None, 'True'), 'True')
+        self.assertCheck((None, 'yes'), 'yes')
+
+    def test_bool_string_or_id(self):
+        # NOTE(sirp): '0' and '1' could be a bool value or an ID.  Since there
+        # are many other ways to specify bools (e.g. 't', 'f'), it's better to
+        # treat as an ID.
+        self.assertCheck((None, 0), 0)
+        self.assertCheck((None, 1), 1)
+        self.assertCheck((None, '0'), '0')
+        self.assertCheck((None, '1'), '1')
+
+    def test_value_is_image_id(self):
+        def fake_get_remote_image_service(context, image_id):
+            class FakeGlance(object):
+                def show(self, context, image_id):
+                    pass
+
+            return FakeGlance(), image_id
+
+        self.stubs.Set(glance, 'get_remote_image_service',
+                fake_get_remote_image_service)
+
+        self.assertCheck((2, None), 2)

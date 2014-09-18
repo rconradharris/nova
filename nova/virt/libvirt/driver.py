@@ -199,6 +199,12 @@ libvirt_opts = [
                help='Number of seconds to wait for instance to shut down after'
                     ' soft reboot request is made. We fall back to hard reboot'
                     ' if instance does not shutdown within this window.'),
+    cfg.ListOpt('shutdown_flags',
+                default=['default'],
+                help="Type of Libvirt shutdown to perform. Defaults to"
+                     " hypervisor's choice. Valid choices are 'default',"
+                     " 'acpi_power_btn', 'guest_agent', 'initctl', 'signal',"
+                     " and 'paravirt'"),
     cfg.StrOpt('cpu_mode',
                help='Set to "host-model" to clone the host CPU feature flags; '
                     'to "host-passthrough" to use the host CPU model exactly; '
@@ -2306,7 +2312,8 @@ class LibvirtDriver(driver.ComputeDriver):
         # NOTE(vish): This check allows us to reboot an instance that
         #             is already shutdown.
         if state == power_state.RUNNING:
-            dom.shutdown()
+            self._shutdown_domain(dom)
+
         # NOTE(vish): This actually could take slightly longer than the
         #             FLAG defines depending on how long the get_info
         #             call takes to return.
@@ -2416,6 +2423,13 @@ class LibvirtDriver(driver.ComputeDriver):
         dom = self._lookup_by_name(instance['name'])
         dom.resume()
 
+    def _shutdown_domain(self, domain):
+        """Shutdown the domain using the preferred method."""
+        flags = 0
+        for key in CONF.libvirt.shutdown_flags:
+            flags |= getattr(libvirt, "VIR_DOMAIN_SHUTDOWN_%s" % key.upper())
+        domain.shutdownFlags(flags)
+
     def _clean_shutdown(self, instance, timeout, retry_interval):
         """Attempt to shutdown the instance gracefully.
 
@@ -2448,7 +2462,27 @@ class LibvirtDriver(driver.ComputeDriver):
 
         LOG.debug("Shutting down instance from state %s", state,
                   instance=instance)
-        dom.shutdown()
+
+        try:
+            self._shutdown_domain(dom)
+        except libvirt.libvirtError as e:
+            # Earlier versions of Libvirt don't have this error defined
+            VIR_ERR_OPERATION_UNSUPPORTED = getattr(
+                    libvirt, 'VIR_ERR_OPERATION_UNSUPPORTED', 84)
+
+            not_retryable = [libvirt.VIR_ERR_INVALID_ARG,
+                             VIR_ERR_OPERATION_UNSUPPORTED]
+
+            if e.get_error_code() in not_retryable:
+                LOG.error(_LE("Shutdown flags '%(flags)s' unsupported:"
+                              " '%(ex)s'"),
+                          {'flags': CONF.libvirt.shutdown_flags,
+                           'ex': six.text_type(e)})
+                return False
+            else:
+                LOG.error(_LE("Error shutting down, retrying...: '%(ex)s'"),
+                          {'ex': six.text_type(e)})
+
         retry_countdown = retry_interval
 
         for sec in six.moves.range(timeout):
@@ -2475,7 +2509,7 @@ class LibvirtDriver(driver.ComputeDriver):
                     LOG.debug("Instance in state %s after %d seconds - "
                               "resending shutdown", state, sec,
                               instance=instance)
-                    dom.shutdown()
+                    self._shutdown_domain(dom)
                 except libvirt.libvirtError:
                     # Assume this is because its now shutdown, so loop
                     # one more time to clean up.

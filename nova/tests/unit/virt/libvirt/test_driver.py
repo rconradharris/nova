@@ -7444,7 +7444,7 @@ class LibvirtConnTestCase(test.NoDBTestCase):
         mock_domain.info().AndReturn(
             (libvirt_driver.VIR_DOMAIN_RUNNING,) + info_tuple)
         mock_domain.ID().AndReturn('some_fake_id')
-        mock_domain.shutdown()
+        mock_domain.shutdownFlags(fakelibvirt.VIR_DOMAIN_SHUTDOWN_DEFAULT)
         mock_domain.info().AndReturn(
             (libvirt_driver.VIR_DOMAIN_CRASHED,) + info_tuple)
         mock_domain.ID().AndReturn('some_other_fake_id')
@@ -7484,7 +7484,7 @@ class LibvirtConnTestCase(test.NoDBTestCase):
         mock_domain.info().AndReturn(
             (libvirt_driver.VIR_DOMAIN_RUNNING,) + info_tuple)
         mock_domain.ID().AndReturn('some_fake_id')
-        mock_domain.shutdown()
+        mock_domain.shutdownFlags(fakelibvirt.VIR_DOMAIN_SHUTDOWN_DEFAULT)
         mock_domain.info().AndReturn(
             (libvirt_driver.VIR_DOMAIN_CRASHED,) + info_tuple)
         mock_domain.ID().AndReturn('some_fake_id')
@@ -7521,7 +7521,8 @@ class LibvirtConnTestCase(test.NoDBTestCase):
         mock_domain.info().AndReturn(
             (libvirt_driver.VIR_DOMAIN_RUNNING,) + info_tuple)
         mock_domain.ID().AndReturn('some_fake_id')
-        mock_domain.shutdown().AndRaise(libvirt.libvirtError('Err'))
+        mock_domain.shutdownFlags(fakelibvirt.VIR_DOMAIN_SHUTDOWN_DEFAULT)\
+                   .AndRaise(libvirt.libvirtError('Err'))
 
         conn = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
         context = None
@@ -7787,7 +7788,7 @@ class LibvirtConnTestCase(test.NoDBTestCase):
         info_tuple = ('fake', 'fake', 'fake', 'also_fake')
         shutdown_count = []
 
-        def count_shutdowns():
+        def count_shutdowns(flags):
             shutdown_count.append("shutdown")
 
         # Mock domain
@@ -7795,21 +7796,23 @@ class LibvirtConnTestCase(test.NoDBTestCase):
 
         mock_domain.info().AndReturn(
                 (libvirt_driver.VIR_DOMAIN_RUNNING,) + info_tuple)
-        mock_domain.shutdown().WithSideEffects(count_shutdowns)
+        mock_domain.shutdownFlags(fakelibvirt.VIR_DOMAIN_SHUTDOWN_DEFAULT)\
+                   .WithSideEffects(count_shutdowns)
 
         retry_countdown = retry_interval
         for x in xrange(min(seconds_to_shutdown, timeout)):
             mock_domain.info().AndReturn(
                 (libvirt_driver.VIR_DOMAIN_RUNNING,) + info_tuple)
             if retry_countdown == 0:
-                mock_domain.shutdown().WithSideEffects(count_shutdowns)
+                mock_domain.shutdownFlags(fakelibvirt.VIR_DOMAIN_SHUTDOWN_DEFAULT)\
+                           .WithSideEffects(count_shutdowns)
                 retry_countdown = retry_interval
             else:
                 retry_countdown -= 1
 
         if seconds_to_shutdown < timeout:
             mock_domain.info().AndReturn(
-                (libvirt_driver.VIR_DOMAIN_SHUTDOWN,) + info_tuple)
+                (fakelibvirt.VIR_DOMAIN_SHUTDOWN,) + info_tuple)
 
         self.mox.ReplayAll()
 
@@ -7856,6 +7859,36 @@ class LibvirtConnTestCase(test.NoDBTestCase):
                                   retry_interval=3,
                                   shutdown_attempts=1,
                                   succeeds=False)
+
+    @mock.patch.object(libvirt_driver.LibvirtDriver, '_lookup_by_name')
+    def _test_clean_shutdown_fail_fast_on_non_retryable_error(self,
+             mock_lookup_by_name, error_code):
+        fake_domain = mock.Mock()
+        mock_lookup_by_name.return_value = fake_domain
+
+        info_tuple = (libvirt_driver.VIR_DOMAIN_RUNNING, 'fake', 'fake',
+                      'fake', 'also_fake')
+        fake_domain.info.return_value = info_tuple
+
+        non_retryable_exc = fakelibvirt.make_libvirtError(
+            libvirt.libvirtError, 'foo', error_code=error_code)
+        fake_domain.shutdownFlags.side_effect = non_retryable_exc
+
+        conn = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
+        instance = {"name": "instancename", "id": "instanceid",
+                    "uuid": "875a8070-d0b9-4949-8b31-104d125c9a64"}
+        result = conn._clean_shutdown(instance, 1, 0.1)
+
+        mock_lookup_by_name.assert_called_once_with('instancename')
+        self.assertFalse(result)
+
+    def test_clean_shutdown_operation_unsupported_fail_fast(self):
+        self._test_clean_shutdown_fail_fast_on_non_retryable_error(
+            error_code=fakelibvirt.VIR_ERR_OPERATION_UNSUPPORTED)
+
+    def test_clean_shutdown_invalid_arg_fail_fast(self):
+        self._test_clean_shutdown_fail_fast_on_non_retryable_error(
+            error_code=fakelibvirt.VIR_ERR_INVALID_ARG)
 
     @mock.patch.object(objects.Flavor, 'get_by_id')
     @mock.patch.object(FakeVirtDomain, 'attachDevice')
